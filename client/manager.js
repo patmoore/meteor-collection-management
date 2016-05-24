@@ -1,6 +1,6 @@
 var subscribeTypes = {
-    cache: 'subscribeCache',
-    default: 'subscribe'
+    'cache': 'subscribeCache',
+    'default': 'subscribe'
 };
 
 Meteor.startup(function() {

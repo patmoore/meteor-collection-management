@@ -1,6 +1,6 @@
 var publishTypes = {
-    cache: 'publishCache',
-    default: 'publish'
+    'cache': 'publishCache',
+    'default': 'publish'
 };
 
 Meteor.startup(function() {

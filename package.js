@@ -7,7 +7,7 @@ var ejson = 'ejson@1.0.7';
 Package.describe({
     name: packageName,
     summary: "Meteor Collection Management",
-    version: "1.9.2",
+    version: "1.9.3",
     git: "https://github.com/patmoore/meteor-collection-management.git"
 });
 
