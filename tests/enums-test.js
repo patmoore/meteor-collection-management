@@ -72,7 +72,7 @@ Tinytest.add('Meteor Collection Management - enums - hasOwnProperty', function(t
 
 Tinytest.add('Meteor Collection Management - enums - testExtraProperties', function(test) {
     test.equal(TestingEnumFake.printMe, 'printMe', 'Problem with adding extra properties on the Enum object.');
-    test.equal(TestingEnumFake.one.printMe, 'printMe', 'Problem with adding extra properties on the Enum.Symbol object.');
+    test.equal(TestingEnumFake.one.printMe, 'printMe', 'Problem with adding extra properties on the Enum.Esymbol object.');
 });
 
 Tinytest.add('Meteor Collection Management - enums - EJSON', function(test) {
