@@ -3,6 +3,96 @@ var subscribeTypes = {
     'default': 'subscribe'
 };
 
+/**
+ * Attached to 
+ */
+function readyFn() {
+    if (this.handle == null || !_.isFunction(this.handle.ready)) {
+        return true;
+    } else {
+        return this.handle.ready();
+    }
+}
+
+function oneFn() {
+    'use strict';
+    var result;
+    if (this == null) {
+        return this;
+    }
+    if (typeof this.findOne === 'function') {
+        // mcm handles
+        result = this.findOne();
+        return result;
+    }
+
+    if (typeof this.fetch === 'function') {
+        // Mongo cursor
+        result = this.fetch();
+    } else {
+        // something which could be an array
+        result = this;
+    }
+    if (_.isArray(result)) {
+        result = result[0];
+    }
+    return result;
+}
+/*
+ * handle: the handle returned by a Manager.____Handle() call. ( the client-side wrapper around the Meteor subscribe )
+ * @return an object that has duck typing to make it look like a meteor cursor.
+ */
+one = function one(handle) {
+    var object = {
+        handle: handle,
+        method: oneFn,
+        ready: readyFn
+    };
+    return object;
+};
+function manyFn() {
+    'use strict';
+    var result;
+    if (this == null) {
+        return this;
+    }
+    if (typeof this.findFetch === 'function') {
+        // mcm handles
+        result = this.findFetch();
+    } else if (typeof this.fetch === 'function') {
+        // Mongo cursor
+        result = this.fetch();
+    } else {
+        // This is not an error, maybe the dev passed an array - but still valid use case if a
+        // non-mongo cursor was passed. - just play nice
+        result = this;
+    }
+    return result;
+}
+// Use these methods in initializeData
+many = function many(handle) {
+    var object = {
+        handle: handle,
+        method: manyFn,
+        ready: readyFn
+    };
+    return object;
+};
+count = function count(handle) {
+    var object = {
+        handle: handle,
+        method: function () {
+            var oneResult = oneFn.apply(this, arguments);
+            if (oneResult != null) {
+                return oneResult.count;
+            } else {
+                return void(0);
+            }
+        },
+        ready: readyFn
+    };
+    return object;
+};
 Meteor.startup(function() {
     'use strict';
     Object.defineProperties(ManagerType.prototype, {

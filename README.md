@@ -8,10 +8,13 @@ Meteor-Collection-Management takes Meteor's concept of javascript code that runs
 
 Meteor ability to offer code that is server/client agnostic is excellent. The MCM package is designed to extend this breakthrough concept.
 
+## Getting started
 
-### Primary Target audience
+./create.sh ManagerName to create an example
+Create the common code in : ./lib/managers
+./lib/managers
 
-MCM is designed to facilitate Meteor project development and improve maintability for professional Meteor projects.
+
 
 ## Challenges with today's reality
 
@@ -32,7 +35,7 @@ The minimized onboarding time is critical. New hires need to be productive the F
 Learning a new framework always has a learning curve. Using MCM companies minimize the possibility, that
  a new hire will introduce a set of common bugs and security holes such as:
 
- 1. subscribing to a non-existant publication
+ 1. subscribing to a non-existent publication
  1. publishing a publication with an incorrect name
  1. on client-side using the wrong query on the client-side collections
  1. allowing client code to alter document fields that that are not permitted.
@@ -94,7 +97,6 @@ To run tests locally run following:
 * find ManagerType.create
 
 ## TODO: how to do testing on the client/ server/ manager code?
-
 
 
 Note: meteor-package-paths ( https://www.npmjs.org/package/meteor-package-paths ) is useful to maintain the package file list.
