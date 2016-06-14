@@ -22,10 +22,12 @@ On server:
 ```javascript
 
     meteorCreateCall: {
-            method: function (myDbObject_client) {
-                var thatManager = this.thatManager;
-                myDbObject = new MyObject(myDbObject_client);
-                myDbObject._save();
+        method: function (myDbObject_client) {
+            var thatManager = this.thatManager;
+            myDbObject = new MyObject(myDbObject_client);
+            myDbObject._save();
+        }
+    }
 ```
 
 Note:
@@ -50,16 +52,19 @@ On server:
 MyManagerType = ManagerType.create(
        ....    
        meteorUpdateCall: {
-            method: function (myDbObject) {
-                var thatManager = this.thatManager;
-                check(myDbObject, MyDbObject);
-                myDbObject = myDbObject.upsertFromUntrusted({
-                    forcedValues: {
+           method: function (myDbObject) {
+               var thatManager = this.thatManager;
+               check(myDbObject, MyDbObject);
+               myDbObject = myDbObject.upsertFromUntrusted({
+                   forcedValues: {
                        // key:values that are forced to a specific value
-                    }
+                       {
+                           property1: "property1 is set to this string irregardless of what was sent from client"
+                       }
+                   }
                 });
-            },
-        },
+           },
+       },
 ```
 
 Some key notes:
