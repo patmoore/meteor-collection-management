@@ -10,7 +10,8 @@ Meteor-Collection-Management takes Meteor's concept of javascript code that runs
 
 On client:
 ```javascript
-   var jsonInput = <from the html input fields>
+        var jsonInput = <from the html input fields>
+        jsonInput._newId = <client_generated_id>
         MyManager.meteorCreateCall(
             new MyDbObject(jsonInput),
             callback
@@ -27,12 +28,16 @@ On server:
                 myDbObject._save();
 ```
 
+Note:
+
+1. The _id field is a security field. To set allow the client to set the _id for a new object, the _newId property is used.
+
 ## Update an object
 
 On client:
 
 ```javascript
-   var jsonInput = <from the html input fields>
+        var jsonInput = <from the html input fields>
         MyManager.meteorUpdateCall(
             new MyDbObject(jsonInput),
             callback
