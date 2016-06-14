@@ -8,10 +8,19 @@ Meteor-Collection-Management takes Meteor's concept of javascript code that runs
 
 ## Creating new object.
 
+On client:
+```javascript
+   var jsonInput = <from the html input fields>
+        MyManager.meteorCreateCall(
+            new MyDbObject(jsonInput),
+            callback
+        );
+```
+
 On server:
 ```javascript
 
-    meteorCall1: {
+    meteorCreateCall: {
             method: function (myDbObject_client) {
                 var thatManager = this.thatManager;
                 myDbObject = new MyObject(myDbObject_client);
@@ -23,8 +32,8 @@ On server:
 On client:
 
 ```javascript
-var jsonInput = <from the html input fields>
-MyManager.meteorCall1(
+   var jsonInput = <from the html input fields>
+        MyManager.meteorUpdateCall(
             new MyDbObject(jsonInput),
             callback
         );
@@ -33,7 +42,9 @@ MyManager.meteorCall1(
 On server:
 
 ```javascript
-    meteorCall1: {
+MyManagerType = ManagerType.create(
+       ....    
+       meteorUpdateCall: {
             method: function (myDbObject) {
                 var thatManager = this.thatManager;
                 check(myDbObject, MyDbObject);
@@ -45,6 +56,14 @@ On server:
             },
         },
 ```
+
+Some key notes:
+
+ 1. The client creates an object and sends an object. This provides a consistent, standard way of sending object changes to the server.
+ 1. The client does not need to have all the information in the transmitted myDbObject. Only the _id and the fields that change are sent.
+ 1. The use of upsertFromUntrusted is an important difference from the code that creates a new object. Using this function, the client code is unable to change
+security:true properties. For example, MyDbObject has a userId field that stores the Meteor.userId() of the user who owns the object. upsertFromUntrusted prevents the userId field from being changed.
+ 1. Any property not listed in the DbObjectType definition for MyDBObjectType is discarded. This prevents accidental garbage from being stored.
 
 ## Getting started
 
