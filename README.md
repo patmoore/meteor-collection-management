@@ -8,10 +8,22 @@ Meteor-Collection-Management takes Meteor's concept of javascript code that runs
 
 ## Creating new object.
 
+On server:
+```javascript
+
+    meteorCall1: {
+            method: function (myDbObject_client) {
+                var thatManager = this.thatManager;
+                myDbObject = new MyObject(myDbObject_client);
+                myDbObject._save();
+```
+
+## Update an object
+
 On client:
 
 ```javascript
-var jsonInput = <from the html fields>
+var jsonInput = <from the html input fields>
 MyManager.meteorCall1(
             new MyDbObject(jsonInput),
             callback
