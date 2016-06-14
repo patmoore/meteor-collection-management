@@ -4,9 +4,35 @@
 
 Meteor-Collection-Management takes Meteor's concept of javascript code that runs on both the client and the server to the next level when it comes to collection management.
 
-## Meteor Basics
+## Quick Start
 
-Meteor ability to offer code that is server/client agnostic is excellent. The MCM package is designed to extend this breakthrough concept.
+## Creating new object.
+
+On client:
+
+```javascript
+var jsonInput = <from the html fields>
+MyManager.meteorCall1(
+            new MyDbObject(jsonInput),
+            callback
+        );
+```
+
+On server:
+
+```javascript
+    meteorCall1: {
+            method: function (myDbObject) {
+                var thatManager = this.thatManager;
+                check(myDbObject, MyDbObject);
+                myDbObject = myDbObject.upsertFromUntrusted({
+                    forcedValues: {
+                       // key:values that are forced to a specific value
+                    }
+                });
+            },
+        },
+```
 
 ## Getting started
 
