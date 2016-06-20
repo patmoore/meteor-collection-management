@@ -24,22 +24,22 @@ Package.onUse(function (api) {
     api.export('count');
     api.export('IronRouterExtension');
 
-    api.addFiles('lib/internalutils.js', ['client', 'server']);
-    api.addFiles('lib/underscoreExtensions.js', ['client', 'server']);
-    api.addFiles('lib/enums.js', ['client', 'server']);
-    api.addFiles('lib/dbobject.js', ['client', 'server']);
-    api.addFiles('lib/manager.js', ['client', 'server']);
-    api.addFiles('client/ironRouterExtensions.js', ['client']);
-    api.addFiles('client/manager.js', ['client' ]);
-    api.addFiles('server/manager.js', 'server');
+    api.addFiles('src/lib/internalutils.js', ['client', 'server']);
+    api.addFiles('src/lib/underscoreExtensions.js', ['client', 'server']);
+    api.addFiles('src/lib/enums.js', ['client', 'server']);
+    api.addFiles('src/lib/dbobject.js', ['client', 'server']);
+    api.addFiles('src/lib/manager.js', ['client', 'server']);
+    api.addFiles('src/client/ironRouterExtensions.js', ['client']);
+    api.addFiles('src/client/manager.js', ['client' ]);
+    api.addFiles('src/server/manager.js', 'server');
 });
 
 Package.onTest(function (api) {
     api.use([packageName, 'tinytest', 'test-helpers']);
     api.use(underscore, ['client', 'server']);
     api.use(mongo, ['client', 'server']);
-    api.addFiles('tests/dbobject-test.js', ['client', 'server']);
-    api.addFiles('tests/enums-test.js', ['client', 'server']);
-    api.addFiles('tests/manager-test.js', ['client', 'server']);
-    api.addFiles('tests/testUnderscoreExtensions.js', ['client', 'server']);
+    api.addFiles('src/tests/dbobject-test.js', ['client', 'server']);
+    api.addFiles('src/tests/enums-test.js', ['client', 'server']);
+    api.addFiles('src/tests/manager-test.js', ['client', 'server']);
+    api.addFiles('src/tests/testUnderscoreExtensions.js', ['client', 'server']);
 });
