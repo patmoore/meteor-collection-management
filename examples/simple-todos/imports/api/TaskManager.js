@@ -1,3 +1,4 @@
+import { check } from 'meteor/check';
 import { ManagerType } from 'meteor/patmoore:meteor-collection-management';
 import { Tasks } from 'tasks.js';
 export default TaskManager = null;
