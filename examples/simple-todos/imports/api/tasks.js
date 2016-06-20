@@ -1,25 +1,10 @@
 import { Meteor } from 'meteor/meteor';
 import { Mongo } from 'meteor/mongo';
 import { check } from 'meteor/check';
-import { DbObjectType, Enums } from 'meteor/patmoore:meteor-collection-management'; 
-
+import { TaskManager, TaskManagerType} from '/client/TaskManager.js';
  
 //export const Tasks = new Mongo.Collection('tasks');
-Tasks = DbObjectType.create({
-	typeName:'tasks',
-	databaseTableName: 'tasks',
-	properties: {
-		owner: {
-			// TODO: how to specify a owner 
-			reference:true
-		},
-		text:{
-			
-		}
-	}
-		
-})
-
+export default TaskManager = null ;
 
 if (Meteor.isServer) {
   // This code only runs on the server
