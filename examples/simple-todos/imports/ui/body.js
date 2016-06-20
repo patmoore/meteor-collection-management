@@ -38,7 +38,7 @@ Template.body.events({
     const target = event.target;
     const text = target.text.value;
     var newTask = new Tasks({text});
-    TaskManager.('insert', newTask);
+    TaskManager.insert(newTask);
  
     // Clear form
     target.text.value = '';
