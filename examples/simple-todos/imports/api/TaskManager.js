@@ -2,7 +2,7 @@ import { ManagerType } from 'meteor/patmoore:meteor-collection-management';
 import { Tasks } from 'tasks.js';
 export default ToDoManager = null;
 export var ToDoManagerType = ManagerType.create({
-	callPrefix: 'ToDoManager',
+	callPrefix: 'TaskManager',
 	meteorTopicDefinitions: [{
 		'tasks': {
 			cursor: function tasksPublication() {
