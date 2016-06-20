@@ -5,7 +5,7 @@ export default TaskManager = null;
 export var TaskManagerType = ManagerType.create({
     callPrefix: 'tasks',
     meteorTopicDefinitions: [{
-        'tasks': {
+        '.tasks': {
             cursor: function tasksPublication() {
                 var thatManager = this.thatManager;
                 return Tasks.find({
