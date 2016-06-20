@@ -1,8 +1,8 @@
-import { ToDoManagerType } from '../ToDoManager.js';
+import { TaskManagerType } from '../TaskManager.js';
 
 (function() {
 	"use strict";
-	_.extend(ToDoManagerType, {
+	_.extend(TaskManagerType, {
 		
 	});
 })(); 
