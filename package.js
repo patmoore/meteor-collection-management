@@ -1,5 +1,4 @@
 var packageName = 'patmoore:meteor-collection-management';
-//var packageName = 'meteor-collection-management';
 
 var  mongo = 'mongo@1.1.7';
 var underscore = 'underscore@1.0.9';
@@ -7,7 +6,7 @@ var ejson = 'ejson@1.0.7';
 Package.describe({
     name: packageName,
     summary: "Meteor Collection Management",
-    version: "1.9.6",
+    version: "1.9.7",
     git: "https://github.com/patmoore/meteor-collection-management.git"
 });
 
