@@ -1,6 +1,2 @@
-import { ManagerType } from 'src/server/manager.js';
+import { ManagerType } from '../../lib/ToDoManager.js';
 
-export default ToDoManager = null;
-export var ToDoManager = ManagerType.create({
-	
-});
