@@ -62,7 +62,7 @@ oauth@1.1.11
 oauth2@1.1.10
 observe-sequence@1.0.12
 ordered-dict@1.0.8
-patmoore:meteor-collection-management@1.9.6
+patmoore:meteor-collection-management@1.9.7
 practicalmeteor:chai@2.1.0_1
 practicalmeteor:loglevel@1.2.0_2
 practicalmeteor:mocha@2.4.5_3
