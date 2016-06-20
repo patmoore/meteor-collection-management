@@ -142,6 +142,7 @@ Has these key maintainability issues:
   1. When the method call gets more parameters, order starts becoming important. When tasks.insert gets a second parameter 'todoTitle', the developer now has to manage get the order correct.
 1. tasks - subscription:
   1. The publish uses a query function that is not available to the client. When the client does the subscription it needs to duplicate the same query run on the server. This shows up as an error if later on a future version of the code allows for someone to see their todos and someone elses' in two separate ui components. The naive version of this code will result in the both authors' todos to be blended together.
+1. The string tasks is being used in several places which makes the code hard to understand, since we cannot . If we wish to change the variable name tasks we might accidently modify the database table. 
 
   
   

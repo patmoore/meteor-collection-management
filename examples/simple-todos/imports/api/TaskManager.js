@@ -1,6 +1,11 @@
 import { check } from 'meteor/check';
-import { ManagerType } from 'meteor/patmoore:meteor-collection-management';
-import { Tasks } from 'tasks.js';
+import { ManagerType, DbObjectType } from 'meteor/patmoore:meteor-collection-management';
+
+export var Tasks = DbObjectType.create({
+  databaseTableName: 'tasks', 
+  properties: ['text', 'owner', 'username']
+});
+
 export default TaskManager = null;
 export var TaskManagerType = ManagerType.create({
     callPrefix: 'tasks',
