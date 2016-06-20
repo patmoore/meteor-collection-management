@@ -95,4 +95,4 @@ Has these key maintainability issues:
   1. function has no mechanism to ensure that all the required fields are present.
   1. renaming the function argument 'text' to 'todoText' would cause new objects to be inserted with different fields that the objects already present.
 1. tasks - subscription:
-  1. The publish was in the 
+  1. The publish uses a query function that is not available to the client. When the client does the subscription it needs to duplicate the same query run on the server. This shows up as an error
