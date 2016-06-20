@@ -1,8 +1,11 @@
 import { Meteor } from 'meteor/meteor';
 import { Mongo } from 'meteor/mongo';
 import { check } from 'meteor/check';
+import { OrderManager, OrderManagerType} from './server/manager.js';
  
-export const Tasks = new Mongo.Collection('tasks');
+//export const Tasks = new Mongo.Collection('tasks');
+export default OrderManager = null ;
+
 
 if (Meteor.isServer) {
   // This code only runs on the server
