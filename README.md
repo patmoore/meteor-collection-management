@@ -6,7 +6,7 @@ Meteor-Collection-Management takes Meteor's concept of javascript code that runs
 
 ## Quick Start
 
-[[[ConvertingToMeteorCollectionManagement]]]
+[ConvertingToMeteorCollectionManagement](ConvertingToMeteorCollectionManagement.md)
 ### Managers 
 
 Managers are combine Meteor.method/Meteor.call and Meteor.publish/Meteor.subcribe functionality.
