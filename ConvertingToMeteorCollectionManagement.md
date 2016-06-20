@@ -15,7 +15,7 @@ The best way to understand why meteor-collection-management exists is to convert
 
 ## Topics: Meteor.publish/Meteor.subscribe
 
-The original tasks.js:
+The original /imports/api/tasks.js:
 
 ```javascript
 export const Tasks = new Mongo.Collection('tasks');
@@ -87,12 +87,61 @@ Meteor.methods({
   },
 });
 ```
+The original /import/ui/body.js:
+
+```javascript
+Template.body.onCreated(function bodyOnCreated() {
+  this.state = new ReactiveDict();
+  Meteor.subscribe('tasks');
+});
+ 
+Template.body.helpers({
+    tasks() {
+
+    const instance = Template.instance();
+    if (instance.state.get('hideCompleted')) {
+      // If hide completed is checked, filter tasks
+      return Tasks.find({ checked: { $ne: true } }, { sort: { createdAt: -1 } });
+    }
+
+        // Otherwise, return all of the tasks
+    return Tasks.find({}, { sort: { createdAt: -1 } });
+  },
+    incompleteCount() {
+    return Tasks.find({ checked: { $ne: true } }).count();
+  },
+});
+
+Template.body.events({
+  'submit .new-task'(event) {
+    // Prevent default browser form submit
+    event.preventDefault();
+ 
+    // Get value from form element
+    const target = event.target;
+    const text = target.text.value;
+
+    Meteor.call('tasks.insert', text);
+ 
+    // Clear form
+    target.text.value = '';
+
+  },
+    'change .hide-completed input'(event, instance) {
+    instance.state.set('hideCompleted', event.target.checked);
+  },
+});
+```
 
 
 Has these key maintainability issues:
 
 1. tasks.insert:
   1. function has no mechanism to ensure that all the required fields are present.
-  1. renaming the function argument 'text' to 'todoText' would cause new objects to be inserted with different fields that the objects already present.
+  1. renaming the function argument 'text' to 'todoText' would cause new objects to be inserted with different fields that the objects already present. Data corruption by accident.
+  1. When the method call gets more parameters, order starts becoming important. When tasks.insert gets a second parameter 'todoTitle', the developer now has to manage get the order correct.
 1. tasks - subscription:
-  1. The publish uses a query function that is not available to the client. When the client does the subscription it needs to duplicate the same query run on the server. This shows up as an error
+  1. The publish uses a query function that is not available to the client. When the client does the subscription it needs to duplicate the same query run on the server. This shows up as an error if later on a future version of the code allows for someone to see their todos and someelses' in two separate ui components. The naive version of this code will result in the both authors' todos to be blended together.
+
+  
+  
