@@ -67,12 +67,21 @@ Object.defineProperties(ManagerType, {
 var StartupFunctions = [];
 
 _.extend(ManagerType.prototype, {
-	// in meteor examples the '.' is commonly used as the separator i.e. 'tasks.insert'
-	// TODO: an options object
-	options: {
-		callSeparator: '.'
-	},
+    // in meteor examples the '.' is commonly used as the separator i.e. 'tasks.insert'
+    // TODO: an options object
+    options: {
+	    callSeparator: '.',
+		topicSeparator: '_pub_'
+    },
+    /**
+     * @return if meteorCallMethodSuffix starts with '.', return meteorCallMethodSuffix (without the leading '.' -backward compatibility)
+     * or the manager's callPrefix + this.options.callSeparator + meteorCallMethodSuffix 
+     */
     getMeteorCallName: function(meteorCallMethodSuffix) {
+        if ( meteorCallMethodSuffix.charAt(0) === '.') {
+            // TODO: log deprecated the first time. 
+            return meteorCallMethodSuffix.substring(1);
+        }
         return this.callPrefix +this.options.callSeparator+ meteorCallMethodSuffix;
     },
     /**
@@ -81,7 +90,11 @@ _.extend(ManagerType.prototype, {
      * is attached )
      */
     getMeteorTopicName: function(meteorTopicSuffix) {
-        return this.callPrefix +"_pub_"+ meteorTopicSuffix;
+        if ( meteorTopicSuffix.charAt(0) === '.') {
+            // TODO: log deprecated the first time.
+            return meteorTopicSuffix.substring(1);
+        }
+        return this.callPrefix +this.options.topicSeparator+ meteorTopicSuffix;
     },
     /**
      * Used only when the server is sending a 'hand-crafted' collection back. (i.e. server is using
