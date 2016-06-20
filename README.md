@@ -1,6 +1,6 @@
 # Collection manager abstraction for Meteor.
 
-[![Build Status](https://travis-ci.org/whalepath/meteor-collection-management.svg?branch=master)](https://travis-ci.org/whalepath/meteor-collection-management)
+[![Build Status](https://travis-ci.org/patmoore/meteor-collection-management.svg?branch=master)](https://travis-ci.org/patmoore/meteor-collection-management)
 
 Meteor-Collection-Management takes Meteor's concept of javascript code that runs on both the client and the server to the next level when it comes to collection management.
 
