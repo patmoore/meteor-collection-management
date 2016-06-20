@@ -1,10 +1,24 @@
 import { Meteor } from 'meteor/meteor';
 import { Mongo } from 'meteor/mongo';
 import { check } from 'meteor/check';
-import { ToDoManager, ToDoManagerType} from '/client/ToDoManager.js';
+import { DbObjectType, Enums } from 'meteor/patmoore:meteor-collection-management'; 
+
  
 //export const Tasks = new Mongo.Collection('tasks');
-export default ToDoManager = null ;
+Tasks = DbObjectType.create({
+	typeName:'tasks',
+	databaseTableName: 'tasks',
+	properties: {
+		owner: {
+			// TODO: how to specify a owner 
+			reference:true
+		},
+		text:{
+			
+		}
+	}
+		
+})
 
 
 if (Meteor.isServer) {
