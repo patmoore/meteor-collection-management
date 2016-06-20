@@ -67,8 +67,13 @@ Object.defineProperties(ManagerType, {
 var StartupFunctions = [];
 
 _.extend(ManagerType.prototype, {
+	// in meteor examples the '.' is commonly used as the separator i.e. 'tasks.insert'
+	// TODO: an options object
+	options: {
+		callSeparator: '.'
+	},
     getMeteorCallName: function(meteorCallMethodSuffix) {
-        return this.callPrefix +"_"+ meteorCallMethodSuffix;
+        return this.callPrefix +this.options.callSeparator+ meteorCallMethodSuffix;
     },
     /**
      * @param meteorTopicSuffix
