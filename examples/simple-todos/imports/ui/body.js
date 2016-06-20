@@ -1,6 +1,7 @@
 import { Meteor } from 'meteor/meteor';
 import { Template } from 'meteor/templating';
 import { Tasks } from '../api/tasks.js';
+import { TaskManager } from '../api/TaskManager.js';
 import { ReactiveDict } from 'meteor/reactive-dict';
  
 import './task.js';
@@ -36,8 +37,8 @@ Template.body.events({
     // Get value from form element
     const target = event.target;
     const text = target.text.value;
-
-    Meteor.call('tasks.insert', text);
+    var newTask = new Tasks({text});
+    TaskManager.('insert', newTask);
  
     // Clear form
     target.text.value = '';

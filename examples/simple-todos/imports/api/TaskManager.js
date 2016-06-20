@@ -19,19 +19,20 @@ export var TaskManagerType = ManagerType.create({
     }],
     meteorCallDefinitions: [{
       'insert': {
-          method: function(text) {
-            check(text, String);
+          method: function(newTask) {
+            check(newTask, Tasks);
          
             // Make sure the user is logged in before inserting a task
             if (! Meteor.userId()) {
               throw new Meteor.Error('not-authorized');
             }
          
-            Tasks.insert({
-              text,
-              createdAt: new Date(),
-              owner: Meteor.userId(),
-              username: Meteor.user().username,
+            var task = Tasks.upsertFromUntrusted({
+                clientObj: newTask,
+                forcedValues: {
+                    owner: Meteor.userId(),
+                    username: Meteor.user().username,
+                }
             });
           }
       },
