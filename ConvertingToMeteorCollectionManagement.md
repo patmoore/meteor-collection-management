@@ -141,7 +141,7 @@ Has these key maintainability issues:
   1. renaming the function argument 'text' to 'todoText' would cause new objects to be inserted with different fields that the objects already present. Data corruption by accident.
   1. When the method call gets more parameters, order starts becoming important. When tasks.insert gets a second parameter 'todoTitle', the developer now has to manage get the order correct.
 1. tasks - subscription:
-  1. The publish uses a query function that is not available to the client. When the client does the subscription it needs to duplicate the same query run on the server. This shows up as an error if later on a future version of the code allows for someone to see their todos and someelses' in two separate ui components. The naive version of this code will result in the both authors' todos to be blended together.
+  1. The publish uses a query function that is not available to the client. When the client does the subscription it needs to duplicate the same query run on the server. This shows up as an error if later on a future version of the code allows for someone to see their todos and someone elses' in two separate ui components. The naive version of this code will result in the both authors' todos to be blended together.
 
   
   

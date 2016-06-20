@@ -5,8 +5,11 @@
 Meteor-Collection-Management takes Meteor's concept of javascript code that runs on both the client and the server to the next level when it comes to collection management.
 
 ## Quick Start
+Example of how MCM is used 
+
 
 [ConvertingToMeteorCollectionManagement](ConvertingToMeteorCollectionManagement.md)
+
 ### Managers 
 
 Managers are combine Meteor.method/Meteor.call and Meteor.publish/Meteor.subcribe functionality.
