@@ -1,10 +1,10 @@
 import { Meteor } from 'meteor/meteor';
 import { Mongo } from 'meteor/mongo';
 import { check } from 'meteor/check';
-import { OrderManager, OrderManagerType} from './server/manager.js';
+import { ToDoManager, ToDoManagerType} from '/client/ToDoManager.js';
  
 //export const Tasks = new Mongo.Collection('tasks');
-export default OrderManager = null ;
+export default ToDoManager = null ;
 
 
 if (Meteor.isServer) {
