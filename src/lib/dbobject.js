@@ -257,9 +257,9 @@ DbObjectType.create = function(fullOptions) {
     }
     if (!_.isEmpty(_.omit(fullOptions, CreateKnownOptionKeys))) {
         throw new Meteor.Error(500,
-            "invalid option(s) to DbObjectType.create. Unknown options=" +
+            "invalid option(s) to DbObjectType.create(options) has unknown option keys=" +
             Object.keys(_.omit(fullOptions, CreateKnownOptionKeys)) +
-                ". Allowed options="+CreateKnownOptionKeys
+                ". Allowed option keys="+CreateKnownOptionKeys
         );
     }
     // TODO: do a deep *merge* of fullOptions.platform.<platform>(note: extend isn't what is wanted)
@@ -281,7 +281,7 @@ DbObjectType.create = function(fullOptions) {
     }
     var typeNameArg = options.typeName, typeNameFn;
     if ( typeNameArg == null) {
-        throw new Meteor.Error(500, "typeName is null; must be a string or function.");
+        throw new Meteor.Error(500, "DbObjectType.create(options): options.typeName must be a string or function returning a string.");
     } else if (_.isFunction(typeNameArg)) {
         typeNameFn = typeNameArg;
     } else if (_.isString(typeNameArg)) {
@@ -289,7 +289,7 @@ DbObjectType.create = function(fullOptions) {
             return typeNameArg;
         };
     } else {
-        throw new Meteor.Error(500, "typeName must be a string or function not a "+typeof typeNameArg);
+        throw new Meteor.Error(500, "DbObjectType.create(options): options.typeName must be a string or function returning a string. The passed typeName is a "+typeof typeNameArg);
     }
 
     var properties = {};

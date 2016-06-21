@@ -1,5 +1,5 @@
 import { DbObjectType } from 'meteor/patmoore:meteor-collection-management';
 export var Tasks = DbObjectType.create({
-  databaseTableName: 'tasks', 
+  databaseTableName: 'tasks',
   properties: ['text', 'owner', 'username']
 });
