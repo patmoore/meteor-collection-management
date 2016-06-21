@@ -4,8 +4,8 @@ import { ManagerType } from 'meteor/patmoore:meteor-collection-management';
 export default TaskManager = null;
 export var TaskManagerType = ManagerType.create({
     callPrefix: 'tasks',
-    meteorTopicDefinitions: [{
-        '.tasks': {
+    meteorTopicDefinitions: {
+        'tasks': {
             cursor: function tasksPublication() {
                 var thatManager = this.thatManager;
                 return Tasks.find({
@@ -16,7 +16,7 @@ export var TaskManagerType = ManagerType.create({
                 });
             }
         }
-    }],
+    },
     meteorCallDefinitions: [{
       'insert': {
           method: function(newTask) {
