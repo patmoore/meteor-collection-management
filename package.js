@@ -1,13 +1,14 @@
 var packageName = 'patmoore:meteor-collection-management';
 
-var  mongo = 'mongo';
-var underscore = 'underscore';
-var ejson = 'ejson';
-var ecmascript = 'ecmascript';
+var  mongo = 'mongo@1.1.9';
+var underscore = 'underscore@1.0.9';
+var ejson = 'ejson@1.0.12';
+var ecmascript = 'ecmascript@0.4.5';
+var modules = 'modules@0.6.8';
 Package.describe({
     name: packageName,
     summary: "Meteor Collection Management",
-    version: "2.0.1",
+    version: "2.0.2",
     git: "https://github.com/patmoore/meteor-collection-management.git"
 });
 
@@ -16,12 +17,12 @@ Package.onUse(function (api) {
     api.use(underscore, ['client', 'server']);
     api.use(ecmascript, ['client', 'server']);
     api.use(mongo, ['client', 'server']);
-    api.use("modules");
+    api.use(modules);
     api.mainModule("src/server/index.js", "server");
     api.mainModule("src/client/index.js", "client");
 
     api.export('DbObjectType');
-    api.export('ManagerType');
+//    api.export('ManagerType');
     api.export('Enums');
     api.export('one');
     api.export('many');
