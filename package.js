@@ -4,7 +4,7 @@ var  mongo = 'mongo@1.1.9';
 var underscore = 'underscore@1.0.9';
 var ejson = 'ejson@1.0.12';
 var ecmascript = 'ecmascript@0.4.5';
-var modules = 'modules@0.6.8';
+var modules = 'modules@0.6.3';
 Package.describe({
     name: packageName,
     summary: "Meteor Collection Management",
