@@ -1,3 +1,4 @@
+import {ManagerType } from '../lib/manager.js';
 Tinytest.add('Meteor Collection Management - manager - simple', function(test) {
     var calledMethods = {};
     var TestManagerType = ManagerType.create({

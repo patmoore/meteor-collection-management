@@ -1,3 +1,4 @@
+import { handleStringOrObjectDefinition } from './internalutils.js';
 /**
  * Abstract base class for managers. Subclasses should look like this:
 
@@ -12,7 +13,7 @@ server)
  *
  * @constructor
  */
-ManagerType = function(callPrefix, meteorCallDefinitions, meteorTopicDefinitions) {
+export var ManagerType = function(callPrefix, meteorCallDefinitions, meteorTopicDefinitions) {
     'use strict';
     var thatManager = this;
     if (! callPrefix instanceof String ) {
@@ -700,3 +701,4 @@ ManagerType.create = function(options) {
     _.extend(subClassType.prototype, extensions);
     return subClassType;
 };
+

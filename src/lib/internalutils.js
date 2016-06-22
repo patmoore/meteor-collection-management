@@ -38,7 +38,7 @@
 // TO_PAT: If we find ourselves having to expend nontrivial maintainence effort on this, one thought
 // might be to permit only definitions consisting of a single object, with keys equal to either
 // 'default' (or true, to mean the same thing) or an object of special properties.
-handleStringOrObjectDefinition = function(
+export var handleStringOrObjectDefinition = function(
     argumentArrayOrObject, definitionProcessingFunction, mergeExistingDefinition, functionKey
 ) {
     'use strict';

@@ -1,9 +1,10 @@
+import { ManagerType } from '../lib/manager.js';
 var publishTypes = {
     'cache': 'publishCache',
     'default': 'publish'
 };
 
-Meteor.startup(function() {
+var extendManagerType_server = function() {
     'use strict';
     Object.defineProperties(ManagerType.prototype, {
         /**
@@ -419,4 +420,5 @@ Meteor.startup(function() {
             }
         }
     });
-});
+}
+extendManagerType_server();

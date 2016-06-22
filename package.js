@@ -3,16 +3,18 @@ var packageName = 'patmoore:meteor-collection-management';
 var  mongo = 'mongo@1.1.9';
 var underscore = 'underscore@1.0.9';
 var ejson = 'ejson@1.0.12';
+var ecmascript = 'ecmascript@0.4.5';
 Package.describe({
     name: packageName,
     summary: "Meteor Collection Management",
-    version: "1.9.9",
+    version: "2.0.0",
     git: "https://github.com/patmoore/meteor-collection-management.git"
 });
 
 Package.onUse(function (api) {
     api.use(ejson, ['client', 'server']);
     api.use(underscore, ['client', 'server']);
+    api.use(ecmascript, ['client', 'server']);
     api.use(mongo, ['client', 'server']);
 
     api.export('DbObjectType');
@@ -36,6 +38,7 @@ Package.onUse(function (api) {
 Package.onTest(function (api) {
     api.use([packageName, 'tinytest', 'test-helpers']);
     api.use(underscore, ['client', 'server']);
+    api.use(ecmascript, ['client', 'server']);
     api.use(mongo, ['client', 'server']);
     api.addFiles('src/tests/dbobject-test.js', ['client', 'server']);
     api.addFiles('src/tests/enums-test.js', ['client', 'server']);

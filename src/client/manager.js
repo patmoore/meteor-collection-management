@@ -1,3 +1,4 @@
+import { ManagerType } from '../lib/manager.js'; 
 var subscribeTypes = {
     'cache': 'subscribeCache',
     'default': 'subscribe'
@@ -6,7 +7,7 @@ var subscribeTypes = {
 /**
  * Attached to 
  */
-function readyFn() {
+export var readyFn = function () {
     if (this.handle == null || !_.isFunction(this.handle.ready)) {
         return true;
     } else {
@@ -42,7 +43,7 @@ function oneFn() {
  * handle: the handle returned by a Manager.____Handle() call. ( the client-side wrapper around the Meteor subscribe )
  * @return an object that has duck typing to make it look like a meteor cursor.
  */
-one = function one(handle) {
+export var one = function one(handle) {
     var object = {
         handle: handle,
         method: oneFn,
@@ -70,7 +71,7 @@ function manyFn() {
     return result;
 }
 // Use these methods in initializeData
-many = function many(handle) {
+export var many = function many(handle) {
     var object = {
         handle: handle,
         method: manyFn,
@@ -78,7 +79,7 @@ many = function many(handle) {
     };
     return object;
 };
-count = function count(handle) {
+export var count = function count(handle) {
     var object = {
         handle: handle,
         method: function () {
@@ -93,7 +94,7 @@ count = function count(handle) {
     };
     return object;
 };
-Meteor.startup(function() {
+export var extendManagerType_client = function() {
     'use strict';
     Object.defineProperties(ManagerType.prototype, {
         /**
@@ -376,4 +377,5 @@ Meteor.startup(function() {
             }
         }
     });
-});
+}
+extendManagerType_client();

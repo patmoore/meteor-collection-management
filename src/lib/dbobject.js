@@ -1,3 +1,4 @@
+import { handleStringOrObjectDefinition } from './internalutils.js';
 /**
  * IMPORTANT: This is the base class for all objects stored permanently.
  * (There maybe objects stored in temporary collections for client/server interaction)
