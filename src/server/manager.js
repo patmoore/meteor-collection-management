@@ -1,4 +1,4 @@
-import { ManagerType } from '../lib/manager.js';
+import '../lib/manager.js';
 var publishTypes = {
     'cache': 'publishCache',
     'default': 'publish'

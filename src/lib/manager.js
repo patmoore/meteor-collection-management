@@ -13,7 +13,7 @@ server)
  *
  * @constructor
  */
-export var ManagerType = function(callPrefix, meteorCallDefinitions, meteorTopicDefinitions) {
+ManagerType = function(callPrefix, meteorCallDefinitions, meteorTopicDefinitions) {
     'use strict';
     var thatManager = this;
     if (! callPrefix instanceof String ) {

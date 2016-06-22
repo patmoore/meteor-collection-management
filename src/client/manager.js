@@ -1,4 +1,4 @@
-import { ManagerType } from '../lib/manager.js'; 
+import '../lib/manager.js';
 var subscribeTypes = {
     'cache': 'subscribeCache',
     'default': 'subscribe'

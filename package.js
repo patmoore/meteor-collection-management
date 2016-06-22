@@ -22,7 +22,7 @@ Package.onUse(function (api) {
     api.mainModule("src/client/index.js", "client");
 
     api.export('DbObjectType');
-//    api.export('ManagerType');
+    api.export('ManagerType');
     api.export('Enums');
     api.export('one');
     api.export('many');
