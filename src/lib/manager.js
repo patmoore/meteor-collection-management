@@ -1,4 +1,8 @@
 import { handleStringOrObjectDefinition } from './internalutils.js';
+
+//use ManagerType.prototype.startup
+var StartupFunctions = [];
+
 /**
  * Abstract base class for managers. Subclasses should look like this:
 
@@ -13,90 +17,69 @@ server)
  *
  * @constructor
  */
-ManagerType = function(callPrefix, meteorCallDefinitions, meteorTopicDefinitions) {
-    'use strict';
-    var thatManager = this;
-    if (! callPrefix instanceof String ) {
-        throw new Meteor.Error(500, "No manager prefix supplied");
-    }
-    Object.defineProperties(this, {
-        callPrefix : {
-            value : callPrefix,
-            writable : false,
-            enumerable: true,
-            configurable: false
-        },
-        // self-reference so that within cursor functions there is consistently available 'thatManager'
-        // so in all functions we can do:
-        //   var thatManager = this.thatManager; ( even if 'this' is a cursor and not a manager )
-        thatManager: {
-            value: thatManager,
-            // not enumerable to avoid infinite loops when using libraries that stringify objects.
-            enumerable: false,
-            writable: false,
-            configurable: false
+ManagerType = class ManagerType {
+    constructor(callPrefix, meteorCallDefinitions, meteorTopicDefinitions) {
+        'use strict';
+        var thatManager = this;
+        if (! callPrefix instanceof String ) {
+            throw new Meteor.Error(500, "No manager prefix supplied");
         }
-    });
-    thatManager.createMeteorCallMethods(meteorCallDefinitions);
-    thatManager.createTopics(meteorTopicDefinitions);
-    if ( typeof this.ctor == "function") {
-        this.ctor.apply(this,arguments);
-    }
-};
-Object.defineProperties(ManagerType, {
-        // TODO: make an object so can detect instanceof on the server
-        Pagination: {
-            value: function (options) {
-                var pagination = {
-                    skip: 0,
-                    limit: 30
-                };
-                if ( options ) {
-                    // skip and limit are Mongo options on queries (also ensure that skip is a number)
-                    pagination.skip = Number(options.skip) || 0;
-                    pagination.limit = Number(options.limit) || 30;
-                }
-                return pagination;
+        Object.defineProperties(this, {
+            callPrefix : {
+                value : callPrefix,
+                writable : false,
+                enumerable: true,
+                configurable: false
             },
-            enumerable: false,
-            writable: false
+            // self-reference so that within cursor functions there is consistently available 'thatManager'
+            // so in all functions we can do:
+            //   var thatManager = this.thatManager; ( even if 'this' is a cursor and not a manager )
+            thatManager: {
+                value: thatManager,
+                // not enumerable to avoid infinite loops when using libraries that stringify objects.
+                enumerable: false,
+                writable: false,
+                configurable: false
+            }
+        });
+        thatManager.createMeteorCallMethods(meteorCallDefinitions);
+        thatManager.createTopics(meteorTopicDefinitions);
+        if ( typeof this.ctor == "function") {
+            this.ctor.apply(this,arguments);
         }
     }
-);
-
-// use ManagerType.prototype.startup
-var StartupFunctions = [];
-
-_.extend(ManagerType.prototype, {
     // in meteor examples the '.' is commonly used as the separator i.e. 'tasks.insert'
     // TODO: an options object
-    options: {
-	    callSeparator: '.',
-		topicSeparator: '_pub_'
-    },
+    get options() {
+	    return {
+	        callSeparator: '.',
+	        topicSeparator: '_pub_',
+	        clientOnlyTableSeparator: '_table_'
+	    }
+    }
     /**
      * @return if meteorCallMethodSuffix starts with '.', return meteorCallMethodSuffix (without the leading '.' -backward compatibility)
      * or the manager's callPrefix + this.options.callSeparator + meteorCallMethodSuffix 
      */
-    getMeteorCallName: function(meteorCallMethodSuffix) {
+    getMeteorCallName(meteorCallMethodSuffix) {
         if ( meteorCallMethodSuffix.charAt(0) === '.') {
             // TODO: log deprecated the first time. 
             return meteorCallMethodSuffix.substring(1);
         }
         return this.callPrefix +this.options.callSeparator+ meteorCallMethodSuffix;
-    },
+    }
     /**
      * @param meteorTopicSuffix
      * @returns {string} - The meteorTopic name that is going to be unique ( the manager call prefix
      * is attached )
      */
-    getMeteorTopicName: function(meteorTopicSuffix) {
+    getMeteorTopicName(meteorTopicSuffix) {
         if ( meteorTopicSuffix.charAt(0) === '.') {
             // TODO: log deprecated the first time.
             return meteorTopicSuffix.substring(1);
         }
         return this.callPrefix +this.options.topicSeparator+ meteorTopicSuffix;
-    },
+    }
     /**
      * Used only when the server is sending a 'hand-crafted' collection back. (i.e. server is using
      * self.added(), self.changed(), etc.  to create the published cursor instead of a regular
@@ -107,10 +90,11 @@ _.extend(ManagerType.prototype, {
      * @param meteorTopicSuffix
      * @returns {string}
      */
-    getMeteorTopicTableName: function(meteorTopicSuffix) {
-        return this.callPrefix +"_pub_"+ meteorTopicSuffix+'_Table';
-    },
-    createMeteorCallMethods : function(meteorCallDefinitions) {
+    getMeteorTopicTableName(meteorTopicSuffix) {
+        return this.callPrefix +this.options.clientOnlyTableSeparator+ meteorTopicSuffix;
+    }
+    createMeteorCallMethods(meteorCallDefinitions) {
+        'use strict';
         var thatManager = this.thatManager;
         handleStringOrObjectDefinition.call(thatManager, meteorCallDefinitions,
         function(meteorCallDefinition, meteorCallNameSuffix) {
@@ -122,8 +106,9 @@ _.extend(ManagerType.prototype, {
                 meteorCallDefinition),
                 meteorCallNameSuffix);
         }, true, 'method');
-    },
-    createTopics : function(meteorTopicDefinitions) {
+    }
+    createTopics(meteorTopicDefinitions) {
+        'use strict';
         var thatManager = this.thatManager;
         handleStringOrObjectDefinition.call(thatManager, meteorTopicDefinitions,
             function(meteorTopicDefinition, meteorTopicSuffix) {
@@ -136,7 +121,7 @@ _.extend(ManagerType.prototype, {
                     meteorTopicSuffix);
             },
             true, 'cursor');
-    },
+    }
     /**
      * Define on the manager
      *   find<meteorTopicSuffix>
@@ -147,7 +132,7 @@ _.extend(ManagerType.prototype, {
      * @param meteorTopicSuffix
      * @private
      */
-    _defineFindFunctionsForSubscription: function(meteorTopicSuffix, meteorTopicCursorFunction) {
+    _defineFindFunctionsForSubscription(meteorTopicSuffix, meteorTopicCursorFunction) {
         'use strict';
         var thatManager = this.thatManager;
         var meteorTopicSuffixCapitalized = meteorTopicSuffix.substring(0,1).toUpperCase()
@@ -186,7 +171,7 @@ _.extend(ManagerType.prototype, {
                 }
             };
         }
-    },
+    }
     /**
      * if callPrefix: 'foo' then
      *
@@ -205,7 +190,7 @@ _.extend(ManagerType.prototype, {
      * @return
      * @private
      */
-    _getSetting: function(settingKey, assets) {
+    _getSetting(settingKey, assets) {
         var thatManager = this.thatManager;
         var key;
         if ( settingKey == null ) {
@@ -246,7 +231,7 @@ _.extend(ManagerType.prototype, {
                 ") and Meteor.settings.public."+key, "(", typeof publicValue, ")");
             return void(0);
         }
-    },
+    }
     /**
      * functions that run after all the managers are created AND need to check to see if they can
      * run (i.e. expected objects exist) before running.
@@ -286,7 +271,7 @@ _.extend(ManagerType.prototype, {
      *
      * Note: can be called without a 'this' if startupFunctions need to be added without a manager.
      */
-    startup: function(startupFns) {
+    startup(startupFns) {
         var startupFunctions;
         if ( arguments[0] instanceof Array ) {
             startupFunctions = [].concat(arguments[0]);
@@ -322,12 +307,12 @@ _.extend(ManagerType.prototype, {
                 );
             }
         });
-    },
+    }
     /**
      * execute the register startup functions ( called by internal code - user of this library
      * typically does not need to do their own call to this function)
      */
-    executeStartupFunctions: function() {
+    executeStartupFunctions() {
         var executedAFunction = true;
         var executedCount = 0;
         // loop until all functions have executed or no functions report that they can execute.
@@ -352,8 +337,8 @@ _.extend(ManagerType.prototype, {
                 'startup functions never could execute'
             );
         }
-    },
-    __bind: function(functionToBind, self, argsArray) {
+    }
+    __bind(functionToBind, self, argsArray) {
         var thatManager = this.thatManager;
         var fn;
         // make copy in case call was: _wrapAsyncFunction(aFunction, aThis, arguments)
@@ -365,7 +350,7 @@ _.extend(ManagerType.prototype, {
             fn = functionToBind.bind(self);
         }
         return fn;
-    },
+    }
     /**
      * Return a function that is Meteor bound to the current environment.
      * this will be the current Manager.
@@ -377,12 +362,12 @@ _.extend(ManagerType.prototype, {
      * @returns {56|104}
      * @private
      */
-    _boundFunctionWithThis: function(functionToBind, argsArray) {
+    _boundFunctionWithThis(functionToBind, argsArray) {
         var thatManager = this.thatManager;
         var self = this;
         var fn = thatManager._boundFunction(functionToBind, self, argsArray);
         return fn;
-    },
+    }
     /**
      * Return a function that is Meteor bound to the current environment
      * this is not set
@@ -392,31 +377,31 @@ _.extend(ManagerType.prototype, {
      * @returns bound function
      * @private
      */
-    _boundFunction: function(functionToBind, self, argsArray) {
+    _boundFunction(functionToBind, self, argsArray) {
         var thatManager = this.thatManager;
         var fn = thatManager.__bind(functionToBind, self, argsArray);
         var fnEnv = Meteor.bindEnvironment(fn);
         return fnEnv;
-    },
+    }
     /**
      * Meteor.wrapAsync(function, this)
      * @param functionToBind
      * @return {*}
      * @private
      */
-    _wrapAsyncFunctionWithThis: function(functionToBind, argsArray) {
+    _wrapAsyncFunctionWithThis(functionToBind, argsArray) {
         var thatManager = this.thatManager;
         var self = this;
         var fn = thatManager._wrapAsyncFunction(functionToBind, self, argsArray);
         return fn;
-    },
-    _wrapAsyncFunction: function(functionToBind, self, argsArray) {
+    }
+    _wrapAsyncFunction(functionToBind, self, argsArray) {
         var thatManager = this.thatManager;
         var fn = thatManager.__bind(functionToBind, self, argsArray);
         var fnEnv = Meteor.wrapAsync(fn);
         return fnEnv;
-    },
-    getFullMeteorTopicDefinition: function(meteorTopicDefinition) {
+    }
+    getFullMeteorTopicDefinition(meteorTopicDefinition) {
         var thatManager = this.thatManager;
         var meteorTopicSuffix = meteorTopicDefinition.meteorTopicSuffix;
         if (meteorTopicSuffix == null) {
@@ -433,10 +418,10 @@ _.extend(ManagerType.prototype, {
             meteorTopicDefinition
         );
         return fullMeteorTopicDefinition;
-    },
+    }
     // we don't want the fullMeteorTopicDefinition.cursor function
     // this allows for different permissionCheck option for example.
-    _createFullDerivedDefinition: function(meteorTopicDefinition, derivedDefinition, extensionName) {
+    _createFullDerivedDefinition(meteorTopicDefinition, derivedDefinition, extensionName) {
         var thatManager = this.thatManager;
         var uppercaseExtensionName = extensionName.charAt(0).toUpperCase()
             + extensionName.substring(1);
@@ -461,8 +446,8 @@ _.extend(ManagerType.prototype, {
             derivedDefinition
         );
         return fullDerivedDefinition;
-    },
-    _processDerivedCursors: function(fullMeteorTopicDefinition, processFn) {
+    }
+    _processDerivedCursors(fullMeteorTopicDefinition, processFn) {
         var thatManager = this.thatManager;
         if (fullMeteorTopicDefinition.derived) {
             _.each(fullMeteorTopicDefinition.derived, function (derivedDefinition, extensionName) {
@@ -478,11 +463,11 @@ _.extend(ManagerType.prototype, {
                 thatManager.createPublication(fullDerivedDefinition);
             });
         }
-    },
+    }
     /**
      * entry point for various logging methods
      */
-    logMessage: function(logMethod, argumentsObj) {
+    logMessage(logMethod, argumentsObj) {
         var thatManager = this;
         if (console && (typeof console[logMethod] === 'function'
                      || typeof console.log === 'function')) {
@@ -495,44 +480,44 @@ _.extend(ManagerType.prototype, {
             }
             (console[logMethod] || console.log).apply(console, args);
         }
-    },
+    }
     /**
      * calls console.log() Add the manager prefix to the logging message
      * Enable turning on/off logging
      */
-    log: function() {
+    log() {
         this.logMessage('debug', arguments);
-    },
+    }
     /**
      * calls console.debug() Add the manager prefix to the logging message
      * Enable turning on/off logging
      */
-    debug: function() {
+    debug() {
         this.logMessage('debug', arguments);
-    },
+    }
     // displays stack
-    trace: function() {
+    trace() {
         this.logMessage('trace', arguments);
-    },
-    warn: function() {
+    }
+    warn() {
         this.logMessage('warn', arguments);
-    },
+    }
     /**
      * calls console.error() Add the manager prefix to the logging message
      * Enable turning on/off logging
      */
-    error: function() {
+    error() {
         this.logMessage('error', arguments);
         debugger;
-    },
-    fatal: function() {
+    }
+    fatal() {
         var thatManager = this.thatManager;
         this.logMessage('fatal', arguments);
         debugger;
         var message = thatManager.safeEJSONStringify.apply(thatManager, arguments);
         throw new Meteor.Error(500, message?message:"stringified failed.");
-    },
-    safeEJSONStringify: function() {
+    }
+    safeEJSONStringify() {
         var thatManager = this.thatManager;
         var message;
         try {
@@ -541,11 +526,11 @@ _.extend(ManagerType.prototype, {
         } catch(error) {
             thatManager.error("stringify failed.");
         }
-    },
-    findOneUserById: function(userId) {
+    }
+    findOneUserById(userId) {
         return Meteor.users.findOne({_id:userId});
-    },
-    updateFromUntrusted: function(changes, lookupFn, permittedKeys) {
+    }
+    updateFromUntrusted(changes, lookupFn, permittedKeys) {
         currentObj = lookupFn();
         if ( currentObj == null ) {
             return null;
@@ -560,19 +545,14 @@ _.extend(ManagerType.prototype, {
         }
 
         return currentObj;
-    },
+    }
     // a useful standard permission check
-    loggedInPermissionCheck: function (callInfo) {
+    loggedInPermissionCheck (callInfo) {
         return callInfo.userId != null;
     }
-});
-Object.defineProperties(ManagerType.prototype, {
-    debugging: {
-        'get': function() {
-            return Meteor.settings && Meteor.settings.public && Meteor.settings.public.debug;
-        }
+    get debugging() {
+        return Meteor.settings && Meteor.settings.public && Meteor.settings.public.debug;
     }
-});
 
 /**
  *
@@ -587,118 +567,139 @@ Object.defineProperties(ManagerType.prototype, {
  *
  * @returns {*}
  */
-ManagerType.create = function(options) {
-    'use strict';
-    // TODO: comments to explain keys.
-    var knownOptionKeys = [
-        // Optional constructor.
-        // TODO: change name to 'constructor' or similar
-        'subClassType',
-        'callPrefix',
-        'meteorCallDefinitions',
-        'meteorTopicDefinitions',
-        'primaryDbObjectType',
-        'properties',
-        'extensions'
-    ];
-    if (Object.keys(options).length == 0) {
-        throw new Meteor.Error(500,'No options in call to ManagerType.create');
-    }
-    var extraKeys = Object.keys(_.omit(options, knownOptionKeys));
-    if (!_.isEmpty(extraKeys)) {
-        throw new Meteor.Error(500,
-            "invalid option(s) to ManagerType.create: bad options:" +
-            extraKeys+ ", expected:" + knownOptionKeys
-        );
-    }
-
-    var callPrefix = options.callPrefix;
-    var meteorCallDefinitions = options.meteorCallDefinitions;
-    var meteorTopicDefinitions = options.meteorTopicDefinitions;
-    var processedTopicDefinitions = {};
-    var meteorTopics;
-    // process topic definitions
-    if ( meteorTopicDefinitions != null && _.isObject(meteorTopicDefinitions)){
-        meteorTopics = {};
-        _.each(meteorTopicDefinitions, function(singleTopicDefinition, cursorName) {
-            // remove the trailing 'Cursor' in the name
-            var meteorTopicSuffix;
-            var realCursorName;
-            if ( cursorName.substring(cursorName.length-6, cursorName.length) === 'Cursor') {
-                meteorTopicSuffix = cursorName.substring(0, cursorName.length-6);
-                realCursorName = cursorName;
-            } else {
-                meteorTopicSuffix = cursorName;
-                realCursorName = cursorName + 'Cursor';
-            }
-            if ( singleTopicDefinition ) {
-                if (_.isFunction(singleTopicDefinition.cursor)) {
-                    meteorTopics[realCursorName] = singleTopicDefinition.cursor;
+    static create(options) {
+        'use strict';
+        // TODO: comments to explain keys.
+        var knownOptionKeys = [
+            // Optional constructor.
+            // TODO: change name to 'constructor' or similar
+            'subClassType',
+            'callPrefix',
+            'meteorCallDefinitions',
+            'meteorTopicDefinitions',
+            'primaryDbObjectType',
+            'properties',
+            'extensions'
+        ];
+        if (Object.keys(options).length == 0) {
+            throw new Meteor.Error(500,'No options in call to ManagerType.create');
+        }
+        var extraKeys = Object.keys(_.omit(options, knownOptionKeys));
+        if (!_.isEmpty(extraKeys)) {
+            throw new Meteor.Error(500,
+                "invalid option(s) to ManagerType.create: bad options:" +
+                extraKeys+ ", expected:" + knownOptionKeys
+            );
+        }
+    
+        var callPrefix = options.callPrefix;
+        var meteorCallDefinitions = options.meteorCallDefinitions;
+        var meteorTopicDefinitions = options.meteorTopicDefinitions;
+        var processedTopicDefinitions = {};
+        var meteorTopics;
+        // process topic definitions
+        if ( meteorTopicDefinitions != null && _.isObject(meteorTopicDefinitions)){
+            meteorTopics = {};
+            _.each(meteorTopicDefinitions, function(singleTopicDefinition, cursorName) {
+                // remove the trailing 'Cursor' in the name
+                var meteorTopicSuffix;
+                var realCursorName;
+                if ( cursorName.substring(cursorName.length-6, cursorName.length) === 'Cursor') {
+                    meteorTopicSuffix = cursorName.substring(0, cursorName.length-6);
+                    realCursorName = cursorName;
                 } else {
-                    meteorTopics[realCursorName] = singleTopicDefinition;
+                    meteorTopicSuffix = cursorName;
+                    realCursorName = cursorName + 'Cursor';
                 }
-                processedTopicDefinitions[meteorTopicSuffix] = singleTopicDefinition;
-            } else {
-                processedTopicDefinitions[meteorTopicSuffix] = {};
+                if ( singleTopicDefinition ) {
+                    if (_.isFunction(singleTopicDefinition.cursor)) {
+                        meteorTopics[realCursorName] = singleTopicDefinition.cursor;
+                    } else {
+                        meteorTopics[realCursorName] = singleTopicDefinition;
+                    }
+                    processedTopicDefinitions[meteorTopicSuffix] = singleTopicDefinition;
+                } else {
+                    processedTopicDefinitions[meteorTopicSuffix] = {};
+                }
+            });
+        }
+    
+        var subClassType;
+        if (options.subClassType) {
+            subClassType = options.subClassType;
+        } else {
+            // the default subclass constructor
+            subClassType = function() {
+                ManagerType.call( this, callPrefix, meteorCallDefinitions, processedTopicDefinitions);
+            };
+        }
+    
+        var primaryDbObjectType = options.primaryDbObjectType;
+        var properties = options.properties || {};
+        var extensions = options.extensions || {};
+    
+        subClassType.prototype = Object.create(ManagerType.prototype, properties);
+        subClassType.prototype.constructor = subClassType;
+        if ( primaryDbObjectType ) {
+            Object.defineProperties(subClassType.prototype, {
+                primaryDbObjectType : {
+                    value: primaryDbObjectType,
+                    writable: false
+                },
+                databaseTable : {
+                    value: primaryDbObjectType.databaseTable,
+                    writable: false
+                },
+                find: {
+                    value: primaryDbObjectType.databaseTable.find.bind(primaryDbObjectType.databaseTable),
+                    writable: false
+                },
+                findOne: {
+                    value: primaryDbObjectType.databaseTable.findOne.bind(
+                        primaryDbObjectType.databaseTable
+                    ),
+                    writable: false
+                },
+                findById: {
+                    value: primaryDbObjectType.databaseTable.findById.bind(
+                        primaryDbObjectType.databaseTable
+                    ),
+                    writable: false
+                },
+                findOneById: {
+                    value: primaryDbObjectType.databaseTable.findOneById.bind(
+                        primaryDbObjectType.databaseTable
+                    ),
+                    writable: false
+                }
+            });
+        }
+    
+        if ( meteorTopics ) {
+            _.extend(subClassType.prototype, meteorTopics);
+        }
+        _.extend(subClassType.prototype, extensions);
+        return subClassType;
+    }
+}
+
+Object.defineProperties(ManagerType, {
+    // TODO: make an object so can detect instanceof on the server
+    Pagination: {
+        value: function (options) {
+            var pagination = {
+                skip: 0,
+                limit: 30
+            };
+            if ( options ) {
+                // skip and limit are Mongo options on queries (also ensure that skip is a number)
+                pagination.skip = Number(options.skip) || 0;
+                pagination.limit = Number(options.limit) || 30;
             }
-        });
+            return pagination;
+        },
+        enumerable: false,
+        writable: false
     }
-
-    var subClassType;
-    if (options.subClassType) {
-        subClassType = options.subClassType;
-    } else {
-        // the default subclass constructor
-        subClassType = function() {
-            ManagerType.call( this, callPrefix, meteorCallDefinitions, processedTopicDefinitions);
-        };
-    }
-
-    var primaryDbObjectType = options.primaryDbObjectType;
-    var properties = options.properties || {};
-    var extensions = options.extensions || {};
-
-    subClassType.prototype = Object.create(ManagerType.prototype, properties);
-    subClassType.prototype.constructor = subClassType;
-    if ( primaryDbObjectType ) {
-        Object.defineProperties(subClassType.prototype, {
-            primaryDbObjectType : {
-                value: primaryDbObjectType,
-                writable: false
-            },
-            databaseTable : {
-                value: primaryDbObjectType.databaseTable,
-                writable: false
-            },
-            find: {
-                value: primaryDbObjectType.databaseTable.find.bind(primaryDbObjectType.databaseTable),
-                writable: false
-            },
-            findOne: {
-                value: primaryDbObjectType.databaseTable.findOne.bind(
-                    primaryDbObjectType.databaseTable
-                ),
-                writable: false
-            },
-            findById: {
-                value: primaryDbObjectType.databaseTable.findById.bind(
-                    primaryDbObjectType.databaseTable
-                ),
-                writable: false
-            },
-            findOneById: {
-                value: primaryDbObjectType.databaseTable.findOneById.bind(
-                    primaryDbObjectType.databaseTable
-                ),
-                writable: false
-            }
-        });
-    }
-
-    if ( meteorTopics ) {
-        _.extend(subClassType.prototype, meteorTopics);
-    }
-    _.extend(subClassType.prototype, extensions);
-    return subClassType;
-};
-
+}
+);
