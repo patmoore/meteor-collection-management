@@ -1,4 +1,70 @@
+import { SimpleSchema } from 'meteor/aldeed:simple-schema';
 import { handleStringOrObjectDefinition } from './internalutils.js';
+var CreateKnownOptionKeys = Object.freeze([
+   // Optional constructor.
+   // TODO: change name to 'constructor' or similar
+   'subClassType',
+   'typeName',
+   'properties',
+   'databaseTableName',
+   'databaseDefinition',
+   'extensions',
+   'privateProperties',
+   // an optional object with 'server', 'client'
+   'platform',
+   'nonstrict'
+]);
+var upsertFromUntrustedKnownOptionKeys = Object.freeze([
+   // new values to upsert
+   'clientObj',
+   // (optional) either mongodb query to find existing or a string which is the object id
+   // or object (default={_id: clientObj._id}) or function yielding existing object.
+   'lookup',
+   // values which are applied irregardless of the values from the client.
+   'forcedValues',
+   // if unset, set, else ignore.
+   'frozenKeys',
+   // if we would insert, throw an error instead
+   'updateOnly',
+   // use _revisionSave rather than _save
+   'revision',
+   // passed to _revisionSave; allow the save even if target isn't the head of a revision
+   // sequence.
+   'allowForks'
+]);
+var PropertyDefinitionOptions = Object.freeze({
+   'set': Match.Optional(Match.OneOf(Function)),
+   'get': Match.Optional(Match.OneOf(Function)),
+   'configurable':Match.Optional(Match.OneOf(Boolean)),
+   'enumerable': Match.Optional(Match.OneOf(Boolean)),
+   'value': Match.Optional(Match.Any),
+   'writable':Match.Optional(Match.OneOf(Boolean)),
+   'toJSONValue':Match.Optional(Match.OneOf(Function)),
+   'fromJSONValue':Match.Optional(Match.OneOf(Function)),
+   'jsonHelper': Match.Optional(Match.OneOf(Function)),
+   'reference':Match.Optional(Match.OneOf(Boolean)),
+   'indexed':Match.Optional(Match.OneOf(Boolean)),
+   'security':Match.Optional(Match.OneOf(Function)),
+   'required':Match.Optional(Match.OneOf(Boolean)),
+   //'defaultValue', -- now provided by SimpleSchema
+   'derived':Match.Optional(Match.Any)
+});
+var PropertyDefinitionOptionKeys = Object.freeze(Object.keys(PropertyDefinitionOptions));
+
+SimpleSchema.extendOptions(PropertyDefinitionOptions);
+function isPropertyDefinitionWritable(propertyDefinition) {
+    return propertyDefinition['writable'] == true || 'set' in propertyDefinition;
+}
+
+var LatestRevisionSelector = Object.freeze({ _nextRevisionId: null });
+//we want code in this package to be able to modify the dbObjectTypes object - but nothing else.
+var DbObjectTypes = {};
+var JsonHelpers = {};
+
+function _getJSONHelper(jsonHelperObj) {
+    var jsonHelper = DbObjectTypes[jsonHelperObj] || JsonHelpers[jsonHelperObj] || _.getGlobal()[jsonHelperObj];
+    return jsonHelper;
+}
 /**
  * IMPORTANT: This is the base class for all objects stored permanently.
  * (There maybe objects stored in temporary collections for client/server interaction)
@@ -56,125 +122,82 @@ var EJSON = Package.ejson.EJSON;
  * @param propertyValues
  * @constructor
  */
-DbObjectType = function(propertyValues){
-    'use strict';
-    var self = this;
-    // TODO: need to handle propertyNamesClientCanSet filtering when loading new data.
-    if ( arguments.length > 0 && propertyValues instanceof Object) {
-        this.fromJSONValue(propertyValues);
-        
-        // if no id currently, *and* a specific id is requested, then copy the specific id
-        // note that _newId is not a property per se - it only exists for a brief while.
-        // note that this means that the client can not set _newId ( as it will not be included in
-        // the generated json )
-        if ( this._id == null && propertyValues._newId ) {
-            // make sure that any numerics get convert to string ids (required by mongo)
-            this._newId = propertyValues._newId +"";
+DbObjectType = class DbObjectType {
+    constructor(propertyValues){
+        'use strict';
+        var self = this;
+        // TODO: need to handle propertyNamesClientCanSet filtering when loading new data.
+        if ( arguments.length > 0 && propertyValues instanceof Object) {
+            this.fromJSONValue(propertyValues);
+            
+            // if no id currently, *and* a specific id is requested, then copy the specific id
+            // note that _newId is not a property per se - it only exists for a brief while.
+            // note that this means that the client can not set _newId ( as it will not be included in
+            // the generated json )
+            if ( this._id == null && propertyValues._newId ) {
+                // make sure that any numerics get convert to string ids (required by mongo)
+                this._newId = propertyValues._newId +"";
+            }
+        }
+        if ( this.createdAt == null ) {
+            this.createdAt = new Date();
+        }
+        this._makePropertyImmutable('createdAt');
+        // HACK SECURITY these properties must only be set on the server : any values from client are
+        // suspect
+        // createdAt / _id : need to be protected.
+        if ( this._id != null) {
+            // safety: once the database _id is set don't allow it to be changed.
+            this._makePropertyImmutable('_id');
         }
     }
-    if ( this.createdAt == null ) {
-        this.createdAt = new Date();
+    static keyValueJsonHelper(keyType, valueType) {
+         // HACK: to temporarily get object serialization working
+         // need a better mechanism.
+        return {
+            toJSONValue: function() {
+                var jsonValue = {};
+                var keyHelper = keyType?_getJSONHelper(keyType):null;
+                var valueHelper = valueType?_getJSONHelper(valueType):null;
+                _.each(this, function(value, key) {
+                    var keyRaw, valueRaw;
+                    if (keyHelper) {
+                        keyRaw = keyHelper.toJSONValue.call(key);
+                    } else {
+                        keyRaw = key;
+                    }
+                    if (valueHelper) {
+                        valueRaw = valueHelper.toJSONValue.call(value);
+                    } else {
+                        valueRaw = value;
+                    }
+                    jsonValue[keyRaw] =valueRaw;
+                });
+                return jsonValue;
+            },
+            fromJSONValue: function(rawJson) {
+                var result ={};
+                var keyHelper = keyType?_getJSONHelper(keyType):null;
+                var valueHelper = valueType?_getJSONHelper(valueType):null;
+                _.each(rawJson, function(valueRaw, keyRaw) {
+                    var key, value;
+                    if (keyHelper) {
+                        key = keyHelper.fromJSONValue(keyRaw);
+                    } else {
+                        key = keyRaw;
+                    }
+                    if (valueHelper) {
+                        value = valueHelper.fromJSONValue(valueRaw);
+                    } else {
+                        value = valueRaw;
+                    }
+                    result[key] =value;
+                });
+                return result;
+            }
+        };
     }
-    this._makePropertyImmutable('createdAt');
-    // HACK SECURITY these properties must only be set on the server : any values from client are
-    // suspect
-    // createdAt / _id : need to be protected.
-    if ( this._id != null) {
-        // safety: once the database _id is set don't allow it to be changed.
-        this._makePropertyImmutable('_id');
-    }
-};
-var CreateKnownOptionKeys = Object.freeze([
-    // Optional constructor.
-    // TODO: change name to 'constructor' or similar
-    'subClassType',
-    'typeName',
-    'properties',
-    'databaseTableName',
-    'databaseDefinition',
-    'extensions',
-    'privateProperties',
-    // an optional object with 'server', 'client'
-    'platform',
-    'nonstrict'
-]);
-var upsertFromUntrustedKnownOptionKeys = Object.freeze([
-    // new values to upsert
-    'clientObj',
-    // (optional) either mongodb query to find existing or a string which is the object id
-    // or object (default={_id: clientObj._id}) or function yielding existing object.
-    'lookup',
-    // values which are applied irregardless of the values from the client.
-    'forcedValues',
-    // if unset, set, else ignore.
-    'frozenKeys',
-    // if we would insert, throw an error instead
-    'updateOnly',
-    // use _revisionSave rather than _save
-    'revision',
-    // passed to _revisionSave; allow the save even if target isn't the head of a revision
-    // sequence.
-    'allowForks'
-]);
 
-var PropertyDefinitionOptionKeys = Object.freeze([
-    'set', 'get', 'configurable', 'enumerable', 'value', 'writable',
-    'toJSONValue', 'fromJSONValue', 'jsonHelper',
-    'reference', 'indexed', 'security', 'required',
-    'defaultValue', 'derived'
-]);
-function isPropertyDefinitionWritable(propertyDefinition) {
-    return propertyDefinition['writable'] == true || 'set' in propertyDefinition;
-}
-
-var LatestRevisionSelector = Object.freeze({ _nextRevisionId: null });
-
-// HACK: to temporarily get object serialization working
-// need a better mechanism.
-DbObjectType.keyValueJsonHelper = function(keyType, valueType) {
-    return {
-        toJSONValue: function() {
-            var jsonValue = {};
-            var keyHelper = keyType?_getJSONHelper(keyType):null;
-            var valueHelper = valueType?_getJSONHelper(valueType):null;
-            _.each(this, function(value, key) {
-                var keyRaw, valueRaw;
-                if (keyHelper) {
-                    keyRaw = keyHelper.toJSONValue.call(key);
-                } else {
-                    keyRaw = key;
-                }
-                if (valueHelper) {
-                    valueRaw = valueHelper.toJSONValue.call(value);
-                } else {
-                    valueRaw = value;
-                }
-                jsonValue[keyRaw] =valueRaw;
-            });
-            return jsonValue;
-        },
-        fromJSONValue: function(rawJson) {
-            var result ={};
-            var keyHelper = keyType?_getJSONHelper(keyType):null;
-            var valueHelper = valueType?_getJSONHelper(valueType):null;
-            _.each(rawJson, function(valueRaw, keyRaw) {
-                var key, value;
-                if (keyHelper) {
-                    key = keyHelper.fromJSONValue(keyRaw);
-                } else {
-                    key = keyRaw;
-                }
-                if (valueHelper) {
-                    value = valueHelper.fromJSONValue(valueRaw);
-                } else {
-                    value = valueRaw;
-                }
-                result[key] =value;
-            });
-            return result;
-        }
-    }
-}
 /**
  * IMPORTANT: The subclass's prototype can only be extended *AFTER* this method is called.
  *
@@ -243,693 +266,686 @@ DbObjectType.keyValueJsonHelper = function(keyType, valueType) {
  * Object.defineProperties. If any value in the key/value pairs is null, then a standard definition
  * will be supplied of : { writable: true }
  *
- *   'databaseTableName' - NOTE: To avoid inadvertantly accidentally changing the database table
+ *   'databaseTableName' - NOTE: To avoid inadvertently accidentally changing the database table
  * names ( very! bad! ) pass in the databaseTableName as a separate string,
  * also 2 different subclasses can refer to same collection ( think different views )
  *
  * @returns {*} the constructor function
  */
-DbObjectType.create = function(fullOptions) {
-    // Note: cannot use strict until there is a way to dereference a global in strict mode
-    //'use strict';
-    if (Object.keys(fullOptions).length == 0) {
-        throw new Meteor.Error(500,'No options in call to DbObjectType.create. Allowed options='
-            +CreateKnownOptionKeys);
-    }
-    if (!_.isEmpty(_.omit(fullOptions, CreateKnownOptionKeys))) {
-        throw new Meteor.Error(500,
-            "invalid option(s) to DbObjectType.create(options) has unknown option keys=" +
-            Object.keys(_.omit(fullOptions, CreateKnownOptionKeys)) +
-                ". Allowed option keys="+CreateKnownOptionKeys
-        );
-    }
-    // TODO: do a deep *merge* of fullOptions.platform.<platform>(note: extend isn't what is wanted)
-    var options = _.extend({}, _.omit(fullOptions, 'platform'));
-    var subClassType;
-    var propertyNames = [ ];
-    var databaseDefinition, extensions;
-    var privateProperties;
-    // if the first argument is not the constructor function then shift arguments
-    if ( typeof options.subClassType != "function" ) {
-        subClassType = function() {
-            DbObjectType.apply(this, arguments);
-            if ( typeof this.ctor === 'function' ) {
-                this.ctor.apply(this, arguments);
-            }
-        };
-    } else {
-        subClassType = options.subClassType;
-    }
-    var typeNameArg = options.typeName, typeNameFn;
-    if ( typeNameArg == null) {
-        throw new Meteor.Error(500, "DbObjectType.create(options): options.typeName must be a string or function returning a string.");
-    } else if (_.isFunction(typeNameArg)) {
-        typeNameFn = typeNameArg;
-    } else if (_.isString(typeNameArg)) {
-        typeNameFn = function() {
-            return typeNameArg;
-        };
-    } else {
-        throw new Meteor.Error(500, "DbObjectType.create(options): options.typeName must be a string or function returning a string. The passed typeName is a "+typeof typeNameArg);
-    }
-
-    var properties = {};
-
-    // properties that are references to other object
-    var referenceProperties = [];
-    // properties that have database indicies ( and thus can have special find*() functions
-    var indexedProperties = [];
-    // properties that must not be null or undefined
-    var requiredProperties = [];
+    static create(fullOptions) {
+        // Note: cannot use strict until there is a way to dereference a global in strict mode
+        //'use strict';
+        if (Object.keys(fullOptions).length == 0) {
+            throw new Meteor.Error(500,'No options in call to DbObjectType.create. Allowed options='
+                +CreateKnownOptionKeys);
+        }
+        if (!_.isEmpty(_.omit(fullOptions, CreateKnownOptionKeys))) {
+            throw new Meteor.Error(500,
+                "invalid option(s) to DbObjectType.create(options) has unknown option keys=" +
+                Object.keys(_.omit(fullOptions, CreateKnownOptionKeys)) +
+                    ". Allowed option keys="+CreateKnownOptionKeys
+            );
+        }
+        // TODO: do a deep *merge* of fullOptions.platform.<platform>(note: extend isn't what is wanted)
+        var options = _.extend({}, _.omit(fullOptions, 'platform'));
+        var subClassType;
+        var propertyNames = [ ];
+        var databaseDefinition, extensions;
+        // if the first argument is not the constructor function then shift arguments
+        if ( typeof options.subClassType != "function" ) {
+            subClassType = function() {
+                DbObjectType.apply(this, arguments);
+                if ( typeof this.ctor === 'function' ) {
+                    this.ctor.apply(this, arguments);
+                }
+            };
+        } else {
+            subClassType = options.subClassType;
+        }
+        var typeNameArg = options.typeName, typeNameFn;
+        if ( typeNameArg == null) {
+            throw new Meteor.Error(500, "DbObjectType.create(options): options.typeName must be a string or function returning a string.");
+        } else if (_.isFunction(typeNameArg)) {
+            typeNameFn = typeNameArg;
+        } else if (_.isString(typeNameArg)) {
+            typeNameFn = function() {
+                return typeNameArg;
+            };
+        } else {
+            throw new Meteor.Error(500, "DbObjectType.create(options): options.typeName must be a string or function returning a string. The passed typeName is a "+typeof typeNameArg);
+        }
     
-    // properties that have defaults
-    var propertiesWithDefault = [];
-
-    // special handling for each property: for example, jsonHelper, toJSONValue, fromJSONValue, etc.
-    // anything that is not an official Javascript attribute on a property definition is copied to
-    // this object.
-    var specialHandling = {};
-    // properties that the client is allowed to set.
-    // this will be used to filter out properties such as '_id', 'id', or any properties with a name
-    // that ends in 'Id' or Ids
-    // these properties should not be set by the client.
-    // Property definitions which are not writable should not be
-    // added to propertyNamesClientCanSet.
-    var propertyNamesClientCanSet = [];
-
-    function processPropertyDefinition(propertyDef, propertyName) {
-        'use strict';
-
-        var propertyDefinition = _.pick(propertyDef, PropertyDefinitionOptionKeys);
-        if (_.isEmpty(propertyDefinition)) {
-            propertyDefinition = {writable: true};
-        }
-        properties[propertyName] = propertyDefinition;
-
-        if (!_.has(propertyDefinition, 'writable')
-         && !_.has(propertyDefinition, 'get')
-         && !_.has(propertyDefinition, 'set')) {
-            // necessary in part because a property definition that is just an empty object (
-            // i.e. 'name:{}' ) results in a property that is not writable.
-            propertyDefinition['writable'] = true;
-        }
-        if ( !('security' in propertyDefinition)) {
-            // not explicitly marked as secure property. heuristics apply
-            if (!('reference' in propertyDefinition)) {
-                // clients are not allowed to alter reference properties.
-                var propertyNameLen = propertyName.length;
-                if ( propertyName.substring(propertyNameLen-2) !== 'Id'
-                  && propertyName.substring(propertyNameLen-3) !== 'Ids') {
-                    // exclude properties ending in 'Id' or 'Ids'
+        var properties = {};
+    
+        // properties that are references to other object
+        var referenceProperties = [];
+        // properties that have database indicies ( and thus can have special find*() functions
+        var indexedProperties = [];
+        // properties that must not be null or undefined
+        var requiredProperties = [];
+        
+        // properties that have defaults
+        var propertiesWithDefault = [];
+    
+        // special handling for each property: for example, jsonHelper, toJSONValue, fromJSONValue, etc.
+        // anything that is not an official Javascript attribute on a property definition is copied to
+        // this object.
+        var specialHandling = {};
+        // properties that the client is allowed to set.
+        // this will be used to filter out properties such as '_id', 'id', or any properties with a name
+        // that ends in 'Id' or Ids
+        // these properties should not be set by the client.
+        // Property definitions which are not writable should not be
+        // added to propertyNamesClientCanSet.
+        var propertyNamesClientCanSet = [];
+    
+        function processPropertyDefinition(propertyDef, propertyName) {
+            'use strict';
+    
+            var propertyDefinition = _.pick(propertyDef, PropertyDefinitionOptionKeys);
+            if (_.isEmpty(propertyDefinition)) {
+                propertyDefinition = {writable: true};
+            }
+            properties[propertyName] = propertyDefinition;
+    
+            if (!_.has(propertyDefinition, 'writable')
+             && !_.has(propertyDefinition, 'get')
+             && !_.has(propertyDefinition, 'set')) {
+                // necessary in part because a property definition that is just an empty object (
+                // i.e. 'name:{}' ) results in a property that is not writable.
+                propertyDefinition['writable'] = true;
+            }
+            if ( !('security' in propertyDefinition)) {
+                // not explicitly marked as secure property. heuristics apply
+                if (!('reference' in propertyDefinition)) {
+                    // clients are not allowed to alter reference properties.
+                    var propertyNameLen = propertyName.length;
+                    if ( propertyName.substring(propertyNameLen-2) !== 'Id'
+                      && propertyName.substring(propertyNameLen-3) !== 'Ids') {
+                        // exclude properties ending in 'Id' or 'Ids'
+                        if(isPropertyDefinitionWritable(propertyDefinition)) {
+                            propertyNamesClientCanSet.push(propertyName);
+                        }
+                    } else {
+                        // By default propertyNames ending in 'Id' or 'Ids' are reference properties.
+                        propertyDefinition.reference = true;
+                    }
+                } else if ( propertyDefinition.reference === false) {
+                    // explicitly not a reference and the security value is false or undefined.
                     if(isPropertyDefinitionWritable(propertyDefinition)) {
                         propertyNamesClientCanSet.push(propertyName);
                     }
-                } else {
-                    // By default propertyNames ending in 'Id' or 'Ids' are reference properties.
-                    propertyDefinition.reference = true;
                 }
-            } else if ( propertyDefinition.reference === false) {
-                // explicitly not a reference and the security value is false or undefined.
+            } else if ( propertyDefinition.security === false) {
+                // explicitly safe to share with client
                 if(isPropertyDefinitionWritable(propertyDefinition)) {
                     propertyNamesClientCanSet.push(propertyName);
                 }
             }
-        } else if ( propertyDefinition.security === false) {
-            // explicitly safe to share with client
-            if(isPropertyDefinitionWritable(propertyDefinition)) {
-                propertyNamesClientCanSet.push(propertyName);
+            if (propertyDefinition.reference) {
+                referenceProperties.push(propertyName);
             }
-        }
-        if (propertyDefinition.reference) {
-            referenceProperties.push(propertyName);
-        }
-        if (propertyDefinition.reference || propertyDefinition.indexed) {
-            indexedProperties.push(propertyName);
-        }
-        if (propertyDefinition.required) {
-            requiredProperties.push(propertyName);
-        }
-        // these are the property fields that Javascript defines
-        // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/defineProperties
-        specialHandling[propertyName] = _.omit(propertyDefinition,
-            'set', 'get', 'configurable', 'enumerable', 'value', 'writable', 'defaultValue');
-        if ( typeof propertyDefinition.defaultValue !== 'undefined' ) {
-            // remember to allow 0 / false / null as a default :-)
-            var defaultValue = propertyDefinition.defaultValue;
-            specialHandling[propertyName].defaultValue = _.isFunction(defaultValue) ?
-                function () {
-                    return defaultValue.call(this, propertyName);
-                } :
-                function () {
-                    return defaultValue;
-                };
-            propertiesWithDefault.push(propertyName);
-        }
-        // we need to know for when we are reading from the database.
-        specialHandling[propertyName].writable = isPropertyDefinitionWritable(propertyDefinition);
-
-        propertyNames.push(propertyName);
-    }
-
-    // process in default values.
-    handleStringOrObjectDefinition.call(this, {
-            _id: {
-                // required by MongoDb
-                security: true,
-                enumerable: false,
-                // we might allow it to be removed ( for transmission to client)
-                configurable: true
-            },
-            // when this object created
-            createdAt: {
-                // by default indexed so we can find last created objects
-                indexed: true,
-                // client definitely not allowed to fuck with created time
-                security: true,
-                enumerable: true,
-                // we might allow it to be removed ( for transmission to client)
-                configurable: true
-            },
-            lastModifiedAt: {
-                indexed: true,
-                security: true,
-                enumerable: true,
-                // we might allow it to be removed ( for transmission to client)
-                configurable: true
+            if (propertyDefinition.reference || propertyDefinition.indexed) {
+                indexedProperties.push(propertyName);
             }
-        },
-        processPropertyDefinition,
-        false
-    );
-    handleStringOrObjectDefinition.call(this, options.properties, processPropertyDefinition, false);
-    databaseDefinition = options.databaseDefinition;
-    extensions = options.extensions;
-    privateProperties = options.privateProperties;
-    var nonstrict = !!options.nonstrict;
-
-    // make the subClassType extend DbObjectType.prototype 
-    // NOTE: this means that any previous code to extend the subClassType.prototype will be lost
-    _.extend(properties, {
-        propertyNames: {
-            writable :false,
-            enumerable: false,
-            value : Object.freeze(propertyNames)
-        },
-        propertyNamesClientCanSet : {
-            writable :false,
-            enumerable: false,
-            value : Object.freeze(propertyNamesClientCanSet)
-        },
-        requiredProperties: {
-            writable: false,
-            enumerable: false,
-            value: Object.freeze(requiredProperties)
-        },
-        // so that we have the typename easily available for debug output
-        // used for EJSON handling
-        typeName: {
-            writable: false,
-            enumerable: false,
-            value : typeNameFn
-        },
-        specialHandling: {
-            writable: false,
-            enumerable: false,
-            value: specialHandling
-        },
-        propertiesWithDefault: {
-            writable: false,
-            enumerable: false,
-            value: propertiesWithDefault
-        },
-        // HACK should really be defined in the list of object properties via
-        // handleStringOrObjectDefinition()
-        // HACK: avoids the id being saved twice in the database. really need ability to make a
-        // property as not to be saved in server db.
-        id: {
-            get : function() {
-                return this._id;
-            },
-            enumerable: true,
-            //security: true
-        },
-        nonstrict: {
-            'get': function() {
-                return nonstrict;
+            if (propertyDefinition.required) {
+                requiredProperties.push(propertyName);
             }
-        }
-    });
-    if ( privateProperties != null ) {
-        _.extend(properties, privateProperties);
-    }
-    subClassType.prototype = Object.create(DbObjectType.prototype, properties);
-    Object.defineProperties(subClassType.prototype, {
-        constructor: {
-            value: subClassType,
-            writable: false,
-            enumerable: false
-        },
-        fromJSONValue: {
-            value: function (rawJson) {
-                var result = DbObjectType.prototype.fromJSONValue.call(
-                    this,
-                    subClassType.prototype.specialHandling,
-                    rawJson
-                );
-                return result;
-            },
-            enumerable: false
-        },
-        toJSONValue: {
-            value: function (selectedPropertyNames) {
-                var result = DbObjectType.prototype.toJSONValue.call(
-                    this,
-                    subClassType.prototype.specialHandling,
-                    selectedPropertyNames||propertyNames
-                );
-                return result;
-            },
-            enumerable: false
-        }
-    });
+            // these are the property fields that Javascript defines
+            // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/defineProperties
+            specialHandling[propertyName] = _.omit(propertyDefinition,
+                'set', 'get', 'configurable', 'enumerable', 'value', 'writable', 'defaultValue');
+            if ( typeof propertyDefinition.defaultValue !== 'undefined' ) {
+                // remember to allow 0 / false / null as a default :-)
+                var defaultValue = propertyDefinition.defaultValue;
+                specialHandling[propertyName].defaultValue = _.isFunction(defaultValue) ?
+                    function () {
+                        return defaultValue.call(this, propertyName);
+                    } :
+                    function () {
+                        return defaultValue;
+                    };
+                propertiesWithDefault.push(propertyName);
+            }
+            // we need to know for when we are reading from the database.
+            specialHandling[propertyName].writable = isPropertyDefinitionWritable(propertyDefinition);
     
-    Object.defineProperties(subClassType, {
-        typeName: {
-            value: subClassType.prototype.typeName,
-            enumerable: false,
-            writable: false
-        },
-        toJSONValue: {
-            value: subClassType.prototype.toJSONValue,
-            enumerable: false,
-            writable: false
-        },
-        fromJSONValue: {
-            enumerable: false,
-            writable: false,
-            value: function () {
-                // assumed that not called with a this.
-                var self = Object.create(subClassType.prototype);
-                subClassType.apply(self, arguments);
-                return self;
-            }
-        },
-        findAllReferencesQueries: function(options) {
-            // TODO: maybe make defined only once on DbObjectType
-            var _options;
-            if ( options ) {
-                _options = _.extend({}, options);
-            } else {
-                _options = {};
-            }
-            _.extend(_options, {
-                typeName: subClassType.prototype.typeName()
-            });
-            var queriesAndUpdatesObject = _findAllReferencesQueries(_options);
-            return queriesAndUpdatesObject;
+            propertyNames.push(propertyName);
         }
-    });
-    if ( extensions != null ) {
-        var resolvedExtensions = _valueOrFunctionResult(extensions);
-        if (_.isArray(resolvedExtensions)) {
-            console.warn(
-                subClassType,typeName(),
-                ": extensions is an array - usually intended to be an object"
-            );
+    
+        // process in default values.
+        handleStringOrObjectDefinition.call(this, {
+                _id: {
+                    // required by MongoDb
+                    security: true,
+                    enumerable: false,
+                    // we might allow it to be removed ( for transmission to client)
+                    configurable: true
+                },
+                // when this object created
+                createdAt: {
+                    // by default indexed so we can find last created objects
+                    indexed: true,
+                    // client definitely not allowed to fuck with created time
+                    security: true,
+                    enumerable: true,
+                    // we might allow it to be removed ( for transmission to client)
+                    configurable: true
+                },
+                lastModifiedAt: {
+                    indexed: true,
+                    security: true,
+                    enumerable: true,
+                    // we might allow it to be removed ( for transmission to client)
+                    configurable: true
+                }
+            },
+            processPropertyDefinition,
+            false
+        );
+        handleStringOrObjectDefinition.call(this, options.properties, processPropertyDefinition, false);
+        databaseDefinition = options.databaseDefinition;
+        extensions = options.extensions;
+        if ( options.privateProperties != null ) {
+            _.extend(properties, options.privateProperties);
         }
-        _.extend(subClassType.prototype, resolvedExtensions);
-    }
-
-    if ( databaseDefinition == null && options.databaseTableName != null) {
-        databaseDefinition = {
-            databaseTableName: options.databaseTableName
-        };
-    }
-    var dbCollection = _.deep(databaseDefinition, 'databaseTable');
-    // create database table if needed
-    if ( databaseDefinition != null && dbCollection == null) {
-        if (databaseDefinition.databaseType == null || databaseDefinition.databaseType === 'mongo') {
-            databaseDefinition.databaseTable = dbCollection = new Mongo.Collection(
-                databaseDefinition.databaseTableName, {
-                transform: function (doc) {
-                    // TODO: should this be a different function, since truly new construction is
-                    // different than recreation?
-                    return new subClassType(doc);
-                }
-            });
-        }
-    }
-
-    if ( dbCollection != null) {
-        // make available both on the prototype (so this.databaseTable works)
-        subClassType.prototype.databaseTable = dbCollection;
-        // .. and the more statically accessed method HumanResearcher.databaseTable
-        // both have their conveniences.
-        subClassType.databaseTable = dbCollection;
-        /**
-         * These functions are usually called from generated partially bound functions.
-         *
-         */
-        var databaseExtensions = {
-            // TODO: fold this into the general referenceProperties method generation that follows.
-            findById: function findById(id) {
-                if ( id == null ) {
-                    // remember typeof null === 'object'
-                    return null;
-                } else if ( typeof id ==='number' ) {
-                    return this.find({_id: "" + id});
-                } else if ( id instanceof Array ) {
-                    return this.find({_id:{$in: id}});
-                } else if ( typeof id === 'string' || typeof id ==='object' ) {
-                    // allows for a more involved condition (i.e. {$in:['1','1']}
-                    return this.find({_id:id});
-                } else {
-                    return null;
-                }
+        var nonstrict = !!options.nonstrict;
+    
+        // make the subClassType extend DbObjectType.prototype 
+        // NOTE: this means that any previous code to extend the subClassType.prototype will be lost
+        subClassType.prototype = Object.create(DbObjectType.prototype, properties);
+        Object.defineProperties(subClassType.prototype, {
+            propertyNames: {
+                writable :false,
+                enumerable: false,
+                value : Object.freeze(propertyNames)
             },
-            // special case because field is _id
-            findFetchById: function findFetchById(id) {
-                var cursor = this.findById(id);
-                if ( cursor ) {
-                    return cursor.fetch();
-                } else {
-                    return null;
+            propertyNamesClientCanSet : {
+                writable :false,
+                enumerable: false,
+                value : Object.freeze(propertyNamesClientCanSet)
+            },
+            requiredProperties: {
+                writable: false,
+                enumerable: false,
+                value: Object.freeze(requiredProperties)
+            },
+            // so that we have the typename easily available for debug output
+            // used for EJSON handling
+            typeName: {
+                writable: false,
+                enumerable: false,
+                value : typeNameFn
+            },
+            specialHandling: {
+                writable: false,
+                enumerable: false,
+                value: specialHandling
+            },
+            propertiesWithDefault: {
+                writable: false,
+                enumerable: false,
+                value: propertiesWithDefault
+            },
+            // HACK should really be defined in the list of object properties via
+            // handleStringOrObjectDefinition()
+            // HACK: avoids the id being saved twice in the database. really need ability to make a
+            // property as not to be saved in server db.
+            id: {
+                get : function() {
+                    return this._id;
+                },
+                enumerable: true,
+                //security: true
+            },
+            nonstrict: {
+                'get': function() {
+                    return nonstrict;
                 }
             },
-            // special case because field is _id
-            findOneById: function findOneById(id) {
-                var result = this.findFetchById(id);
-                if ( result ) {
-                    return result[0];
-                } else {
-                    return null;
-                }
+            constructor: {
+                value: subClassType,
+                writable: false,
+                enumerable: false
             },
-            findRequiredOneById: function findRequiredOneById(id) {
-                var result = this.findFetchById(id);
-                if ( result == null || result[0] == null ) {
-                    throw new Meteor.Error("404", "no item with id " + id);
-                } else {
-                    return result[0];
-                }
-            },
-            /*
-             , ... any other arguments that can go to Mongo.find
-             */
-            findBy: function findBy(propertyName, value/*,...*/) {
-                var args = __findFnArguments.apply(this, arguments);
-                var result = this.find.apply(this, args);
-                return result;
-            },
-            /**
-             * @param propertyName String - prebound.
-             *
-                , ... any other arguments that can go to Mongo.find
-            */
-            findFetchBy: function findFetchBy(propertyName, value/*,...*/) {
-                var cursor = this.findBy.apply(this, arguments);
-                if ( cursor ) {
-                    return cursor.fetch();
-                } else {
-                    return null;
-                }
-            },
-            findOneBy: function findOneBy(propertyName, value) {
-                var args = __findFnArguments.apply(this, arguments);
-                var result = this.findOne.apply(this, args);
-                return result;
-            },
-            findRequiredOneBy: function findRequiredOneBy(propertyName, value) {
-                var result = this.findOneBy.apply(this, arguments);
-                if ( result == null  ) {
-                    throw new Meteor.Error("404", "no item with "+propertyName+" = " + value);
-                } else {
+            fromJSONValue: {
+                value: function (rawJson) {
+                    var result = DbObjectType.prototype.fromJSONValue.call(
+                        this,
+                        subClassType.prototype.specialHandling,
+                        rawJson
+                    );
                     return result;
+                },
+                enumerable: false
+            },
+            toJSONValue: {
+                value: function (selectedPropertyNames) {
+                    var result = DbObjectType.prototype.toJSONValue.call(
+                        this,
+                        subClassType.prototype.specialHandling,
+                        selectedPropertyNames||propertyNames
+                    );
+                    return result;
+                },
+                enumerable: false
+            }
+        }));
+        
+        Object.defineProperties(subClassType, {
+            typeName: {
+                value: subClassType.prototype.typeName,
+                enumerable: false,
+                writable: false
+            },
+            toJSONValue: {
+                value: subClassType.prototype.toJSONValue,
+                enumerable: false,
+                writable: false
+            },
+            fromJSONValue: {
+                enumerable: false,
+                writable: false,
+                value: function () {
+                    // assumed that not called with a this.
+                    var self = Object.create(subClassType.prototype);
+                    subClassType.apply(self, arguments);
+                    return self;
                 }
             },
-
-            /**
-             * find().fetch()
-             */
-            findFetch: function findFetch() {
-                var cursor = this.find.apply(this, arguments);
-                if ( cursor ) {
-                    return cursor.fetch();
+            findAllReferencesQueries: function(options) {
+                // TODO: maybe make defined only once on DbObjectType
+                var _options;
+                if ( options ) {
+                    _options = _.extend({}, options);
                 } else {
-                    return null;
+                    _options = {};
                 }
-            },
-            // exposed so that LatestRevisionSelector can be used in other queries
-            LatestRevisionSelector:LatestRevisionSelector,
-            findLatest: function findLatest(selectorArg, options) {
-                var selector;
-                if (selectorArg == null) {
-                    selector = {};
-                } else if (typeof selectorArg === 'number') {
-                    selector = {seqId: selectorArg.toString() };
-                } else if (typeof selectorArg === 'string') {
-                    selector = {seqId: selectorArg };
-                } else if (typeof selectorArg === 'object') {
-                    selector = selectorArg;
-                } else {
-                    throw new Meteor.Error('findLatest', 'case', typeof selectorArg);
-                }
-                _.extend(selector, LatestRevisionSelector);
-                return this.find(selector, options);
-            },
-            findLatestOne: function findLatestOne(selectorArg, options) {
-                var cursor = this.findLatest(selectorArg, options);
-                if (cursor) {
-                    return cursor.fetch()[0];
-                } else {
-                    return null;
-                }
-            },
-            /**
-             * Make sure that the update does not replace the content of the document by forcing the
-             * use of $set.  if there are any non '$' keys in changedValues.
-             *
-             * @param selector - must be have a selector - not allowed for universal updating.
-             * @param changedValues
-             */
-            updateSome:function updateSome(selector, changedValues, options) {
-                if ( selector == null || _.isEmpty(selector) ) {
-                    return 0;
-                }
-                if (_.isEmpty(changedValues) ) {
-                    return 0;
-                }
-                var allDollarElements =  _.reduce(Object.keys(changedValues), function(memo, key){
-                    if ( memo === false) {
-                        return false;
-                    } else {
-                        return key.substring(0,1) === '$';
-                    }
-                }, true);
-                var updateDirective;
-                if ( allDollarElements === false ) {
-                    updateDirective = {$set:changedValues};
-                } else {
-                    updateDirective = changedValues;
-                }
-                var result = subClassType.databaseTable.update(selector, updateDirective, options);
-                return result;
-            },
-            updateAll:function updateAll(selector, changedValues, options) {
-                var opts = {multi:true};
-                if ( options != null ) {
-                    _.extend(opts,options);
-                }
-                var result = this.updateSome(selector, changedValues, opts);
-                return result;
-            },
-            updateAllBy:function updateAllBy(propertyName, value, changedValues,options) {
-                var selector = {};
-                selector[propertyName] = value;
-                var result = this.updateAll(selector, changedValues, options);
-                return result;
-            },
-            updateOneBy:function updateOneBy(propertyName, value, changedValues) {
-                var selector = {};
-                selector[propertyName] = value;
-                var result = this.updateSome(selector, changedValues);
-                return result;
-            },
-            updateOneById:function updateOneById(id, changedValues) {
-                if (_.isEmpty(id) ) {
-                    return 0;
-                }
-                var result = this.updateOneBy('_id', id, changedValues);
-                return result;
-            },
-            upsertFromUntrusted: function upsertFromUntrusted() {
-                return subClassType.prototype.upsertFromUntrusted.apply(
-                    subClassType.prototype,
-                    arguments
+                _.extend(_options, {
+                    typeName: subClassType.prototype.typeName()
+                });
+                var queriesAndUpdatesObject = _findAllReferencesQueries(_options);
+                return queriesAndUpdatesObject;
+            }
+        });
+        if ( extensions != null ) {
+            var resolvedExtensions = _valueOrFunctionResult(extensions);
+            if (_.isArray(resolvedExtensions)) {
+                console.warn(
+                    subClassType.typeName(),
+                    ": extensions is an array - usually intended to be an object"
                 );
             }
-        };
-        _.extend(subClassType.databaseTable, databaseExtensions);
-
-        // Allow e.g. DBObject.find as shorthand for DBObject.databaseTable.find.
-
-        var convenienceMethodNames = Object.keys(databaseExtensions);
-        convenienceMethodNames.push('find', 'findOne');
-
-        // Even though the client does not have indicies, the client still needs the special
-        // functions for compatability with server code.
-        for (var i in indexedProperties) {
-            var propertyName = indexedProperties[i];
-            var propertyNameCapitalized = propertyName.substring(0,1).toUpperCase()
-                    + propertyName.substring(1);
-            _.each([
-                'findOneBy',
-                'findBy',
-                'findFetchBy',
-                'updateOneBy',
-                'updateAllBy'
-            ], function(baseFunctionName) {
-                var methodName = baseFunctionName+propertyNameCapitalized;
-                // add findByIndexedProperty to DBObject
-                convenienceMethodNames.push(methodName);
-                if ( dbCollection[methodName] == null) {
-                    dbCollection[methodName] = dbCollection[baseFunctionName].bind(
-                        dbCollection,
-                        propertyName
+            _.extend(subClassType.prototype, resolvedExtensions);
+        }
+    
+        if ( databaseDefinition == null && options.databaseTableName != null) {
+            databaseDefinition = {
+                databaseTableName: options.databaseTableName
+            };
+        }
+        var dbCollection = _.deep(databaseDefinition, 'databaseTable');
+        // create database table if needed
+        if ( databaseDefinition != null && dbCollection == null) {
+            if (databaseDefinition.databaseType == null || databaseDefinition.databaseType === 'mongo') {
+                databaseDefinition.databaseTable = dbCollection = new Mongo.Collection(
+                    databaseDefinition.databaseTableName, {
+                    transform: function (doc) {
+                        // TODO: should this be a different function, since truly new construction is
+                        // different than recreation?
+                        return new subClassType(doc);
+                    }
+                });
+            }
+        }
+    
+        if ( dbCollection != null) {
+            // make available both on the prototype (so this.databaseTable works)
+            subClassType.prototype.databaseTable = dbCollection;
+            // .. and the more statically accessed method HumanResearcher.databaseTable
+            // both have their conveniences.
+            subClassType.databaseTable = dbCollection;
+            /**
+             * These functions are usually called from generated partially bound functions.
+             *
+             */
+            var databaseExtensions = {
+                // TODO: fold this into the general referenceProperties method generation that follows.
+                findById: function findById(id) {
+                    if ( id == null ) {
+                        // remember typeof null === 'object'
+                        return null;
+                    } else if ( typeof id ==='number' ) {
+                        return this.find({_id: "" + id});
+                    } else if ( id instanceof Array ) {
+                        return this.find({_id:{$in: id}});
+                    } else if ( typeof id === 'string' || typeof id ==='object' ) {
+                        // allows for a more involved condition (i.e. {$in:['1','1']}
+                        return this.find({_id:id});
+                    } else {
+                        return null;
+                    }
+                },
+                // special case because field is _id
+                findFetchById: function findFetchById(id) {
+                    var cursor = this.findById(id);
+                    if ( cursor ) {
+                        return cursor.fetch();
+                    } else {
+                        return null;
+                    }
+                },
+                // special case because field is _id
+                findOneById: function findOneById(id) {
+                    var result = this.findFetchById(id);
+                    if ( result ) {
+                        return result[0];
+                    } else {
+                        return null;
+                    }
+                },
+                findRequiredOneById: function findRequiredOneById(id) {
+                    var result = this.findFetchById(id);
+                    if ( result == null || result[0] == null ) {
+                        throw new Meteor.Error("404", "no item with id " + id);
+                    } else {
+                        return result[0];
+                    }
+                },
+                /*
+                 , ... any other arguments that can go to Mongo.find
+                 */
+                findBy: function findBy(propertyName, value/*,...*/) {
+                    var args = __findFnArguments.apply(this, arguments);
+                    var result = this.find.apply(this, args);
+                    return result;
+                },
+                /**
+                 * @param propertyName String - prebound.
+                 *
+                    , ... any other arguments that can go to Mongo.find
+                */
+                findFetchBy: function findFetchBy(propertyName, value/*,...*/) {
+                    var cursor = this.findBy.apply(this, arguments);
+                    if ( cursor ) {
+                        return cursor.fetch();
+                    } else {
+                        return null;
+                    }
+                },
+                findOneBy: function findOneBy(propertyName, value) {
+                    var args = __findFnArguments.apply(this, arguments);
+                    var result = this.findOne.apply(this, args);
+                    return result;
+                },
+                findRequiredOneBy: function findRequiredOneBy(propertyName, value) {
+                    var result = this.findOneBy.apply(this, arguments);
+                    if ( result == null  ) {
+                        throw new Meteor.Error("404", "no item with "+propertyName+" = " + value);
+                    } else {
+                        return result;
+                    }
+                },
+    
+                /**
+                 * find().fetch()
+                 */
+                findFetch: function findFetch() {
+                    var cursor = this.find.apply(this, arguments);
+                    if ( cursor ) {
+                        return cursor.fetch();
+                    } else {
+                        return null;
+                    }
+                },
+                // exposed so that LatestRevisionSelector can be used in other queries
+                LatestRevisionSelector:LatestRevisionSelector,
+                findLatest: function findLatest(selectorArg, options) {
+                    var selector;
+                    if (selectorArg == null) {
+                        selector = {};
+                    } else if (typeof selectorArg === 'number') {
+                        selector = {seqId: selectorArg.toString() };
+                    } else if (typeof selectorArg === 'string') {
+                        selector = {seqId: selectorArg };
+                    } else if (typeof selectorArg === 'object') {
+                        selector = selectorArg;
+                    } else {
+                        throw new Meteor.Error('findLatest', 'case', typeof selectorArg);
+                    }
+                    _.extend(selector, LatestRevisionSelector);
+                    return this.find(selector, options);
+                },
+                findLatestOne: function findLatestOne(selectorArg, options) {
+                    var cursor = this.findLatest(selectorArg, options);
+                    if (cursor) {
+                        return cursor.fetch()[0];
+                    } else {
+                        return null;
+                    }
+                },
+                /**
+                 * Make sure that the update does not replace the content of the document by forcing the
+                 * use of $set.  if there are any non '$' keys in changedValues.
+                 *
+                 * @param selector - must be have a selector - not allowed for universal updating.
+                 * @param changedValues
+                 */
+                updateSome:function updateSome(selector, changedValues, options) {
+                    if ( selector == null || _.isEmpty(selector) ) {
+                        return 0;
+                    }
+                    if (_.isEmpty(changedValues) ) {
+                        return 0;
+                    }
+                    var allDollarElements =  _.reduce(Object.keys(changedValues), function(memo, key){
+                        if ( memo === false) {
+                            return false;
+                        } else {
+                            return key.substring(0,1) === '$';
+                        }
+                    }, true);
+                    var updateDirective;
+                    if ( allDollarElements === false ) {
+                        updateDirective = {$set:changedValues};
+                    } else {
+                        updateDirective = changedValues;
+                    }
+                    var result = subClassType.databaseTable.update(selector, updateDirective, options);
+                    return result;
+                },
+                updateAll:function updateAll(selector, changedValues, options) {
+                    var opts = {multi:true};
+                    if ( options != null ) {
+                        _.extend(opts,options);
+                    }
+                    var result = this.updateSome(selector, changedValues, opts);
+                    return result;
+                },
+                updateAllBy:function updateAllBy(propertyName, value, changedValues,options) {
+                    var selector = {};
+                    selector[propertyName] = value;
+                    var result = this.updateAll(selector, changedValues, options);
+                    return result;
+                },
+                updateOneBy:function updateOneBy(propertyName, value, changedValues) {
+                    var selector = {};
+                    selector[propertyName] = value;
+                    var result = this.updateSome(selector, changedValues);
+                    return result;
+                },
+                updateOneById:function updateOneById(id, changedValues) {
+                    if (_.isEmpty(id) ) {
+                        return 0;
+                    }
+                    var result = this.updateOneBy('_id', id, changedValues);
+                    return result;
+                },
+                upsertFromUntrusted: function upsertFromUntrusted() {
+                    return subClassType.prototype.upsertFromUntrusted.apply(
+                        subClassType.prototype,
+                        arguments
                     );
                 }
-            });
-        }
-        // Now we have all the method names.
-        var convenienceMethods = {};
-        _.each(convenienceMethodNames, function(name) {
-            if (_.isFunction(subClassType.databaseTable[name])) {
-                convenienceMethods[name] = subClassType.databaseTable[name].bind(subClassType.databaseTable);
-            } else {
-                convenienceMethods[name] = subClassType.databaseTable[name];
-            }
-        });
-        _.extend(subClassType, convenienceMethods);
-
-        if ( Meteor.isServer) {
-            // mini mongo doesn't have info about the mongo collection.
-            // NOTE: this code was written based on:
-            //
-            // http://stackoverflow.com/questions/18520567/average-aggregation-queries-in-meteor/18884223#18884223
-            //
-            // This code works as of Meteor 0.8.2 BUT may not work in future because of reference to
-            // MongoInternals
-            var databaseTableName = databaseDefinition.databaseTableName;
-            _.extend(subClassType.databaseTable, {
-                /**
-                 * Used when we need to get direct access to the mongo db collection using methods that
-                 * that meteor does not directly support. For example, aggregate functions.
-                 * @returns The raw mongo db object
-                 */
-                getMongoDbCollection: function () {
-                    var db = MongoInternals.defaultRemoteCollectionDriver().mongo.db;
-                    var mongoDbCollection = db.collection(databaseTableName);
-                    return mongoDbCollection;
-                },
-                /**
-                 * TODO: This has not been tested yet.
-                 * If used directly in server or as part of a Meteor.method() then we will need
-                 * to do a http://stackoverflow.com/questions/13190328/meteorjs-async-code-inside-synchronous-meteor-methods-function
-                 * also https://www.eventedmind.com/tracks/feed-archive/meteor-meteor-wrapasync
-                 * @param pipeline - must be array of single object.
-                 * @param callbackFn - this function adds each aggregation result to the cursor
-                 * @param completeFn - this function calls the self.ready() on the cursor
-                 * @returns {*}
-                 */
-                aggregate: function (pipeline, callbackFn, completeFn) {
-//                    var wrappedAsyncFn = Meteor._wrapAsync(this.aggregateCursor);
-//                    var results = wrappedAsyncFn(pipeline, callbackFn, completeFn);
-//                    return results;
-                    throw new Meteor.Error("Need to implement");
-                },
-                /**
-                 * Used when replying to a client with the results. This allows us to keep the
-                 * mongodb code asynchronous.
-                 * @param pipeline
-                 * @param callbackFn
-                 * @param completeFn
-                 */
-                aggregateCursor: function (pipeline, callbackFn, completeFn) {
-                    var boundCallback = Meteor.bindEnvironment(function(error, result) {
-                        if ( error == null ) {
-                            // Note: you will not be able to step into this function or set
-                            // breakpoints on it.
-                            // fiber runs in native code.
-//                            console.log("aggregate Processing results");
-
-                            _.each(result, callbackFn);
-                            if (typeof completeFn === 'function') {
-                                completeFn();
-                            }
-                        } else {
-                            throw new Meteor.Error(500, error.toString());
-                        }
-                    });
-                    var mongoDbCollection = this.getMongoDbCollection();
-                    mongoDbCollection.aggregate(pipeline, boundCallback);
-                }
-            });
-            //Mini mongo doesn't support indexes, so only doing this on server.
+            };
+            _.extend(subClassType.databaseTable, databaseExtensions);
+    
+            // Allow e.g. DBObject.find as shorthand for DBObject.databaseTable.find.
+    
+            var convenienceMethodNames = Object.keys(databaseExtensions);
+            convenienceMethodNames.push('find', 'findOne');
+    
+            // Even though the client does not have indicies, the client still needs the special
+            // functions for compatability with server code.
             for (var i in indexedProperties) {
                 var propertyName = indexedProperties[i];
-                var index = {};
-                index[propertyName] = 1;
-                var opts = { name: 'idx_asc_' + propertyName};
-                subClassType.databaseTable._ensureIndex(index, opts);
+                var propertyNameCapitalized = propertyName.substring(0,1).toUpperCase()
+                        + propertyName.substring(1);
+                _.each([
+                    'findOneBy',
+                    'findBy',
+                    'findFetchBy',
+                    'updateOneBy',
+                    'updateAllBy'
+                ], function(baseFunctionName) {
+                    var methodName = baseFunctionName+propertyNameCapitalized;
+                    // add findByIndexedProperty to DBObject
+                    convenienceMethodNames.push(methodName);
+                    if ( dbCollection[methodName] == null) {
+                        dbCollection[methodName] = dbCollection[baseFunctionName].bind(
+                            dbCollection,
+                            propertyName
+                        );
+                    }
+                });
             }
+            // Now we have all the method names.
+            var convenienceMethods = {};
+            _.each(convenienceMethodNames, function(name) {
+                if (_.isFunction(subClassType.databaseTable[name])) {
+                    convenienceMethods[name] = subClassType.databaseTable[name].bind(subClassType.databaseTable);
+                } else {
+                    convenienceMethods[name] = subClassType.databaseTable[name];
+                }
+            });
+            _.extend(subClassType, convenienceMethods);
+            subClassType.insert = function insert(clientObj) {
+                check(clientObj, subclassType);
+                clientObj._save();
+                return clientObj._id;
+            }
+            subClassType.update = function update(clientObj) {
+                check(clientObj, subclassType);
+                clientObj._save();
+            }
+    
+            if ( Meteor.isServer) {
+                // mini mongo doesn't have info about the mongo collection.
+                // NOTE: this code was written based on:
+                //
+                // http://stackoverflow.com/questions/18520567/average-aggregation-queries-in-meteor/18884223#18884223
+                //
+                // This code works as of Meteor 0.8.2 BUT may not work in future because of reference to
+                // MongoInternals
+                var databaseTableName = databaseDefinition.databaseTableName;
+                _.extend(subClassType.databaseTable, {
+                    /**
+                     * Used when we need to get direct access to the mongo db collection using methods that
+                     * that meteor does not directly support. For example, aggregate functions.
+                     * @returns The raw mongo db object
+                     */
+                    getMongoDbCollection: function () {
+                        var db = MongoInternals.defaultRemoteCollectionDriver().mongo.db;
+                        var mongoDbCollection = db.collection(databaseTableName);
+                        return mongoDbCollection;
+                    },
+                    /**
+                     * TODO: This has not been tested yet.
+                     * If used directly in server or as part of a Meteor.method() then we will need
+                     * to do a http://stackoverflow.com/questions/13190328/meteorjs-async-code-inside-synchronous-meteor-methods-function
+                     * also https://www.eventedmind.com/tracks/feed-archive/meteor-meteor-wrapasync
+                     * @param pipeline - must be array of single object.
+                     * @param callbackFn - this function adds each aggregation result to the cursor
+                     * @param completeFn - this function calls the self.ready() on the cursor
+                     * @returns {*}
+                     */
+                    aggregate: function (pipeline, callbackFn, completeFn) {
+    //                    var wrappedAsyncFn = Meteor._wrapAsync(this.aggregateCursor);
+    //                    var results = wrappedAsyncFn(pipeline, callbackFn, completeFn);
+    //                    return results;
+                        throw new Meteor.Error("Need to implement");
+                    },
+                    /**
+                     * Used when replying to a client with the results. This allows us to keep the
+                     * mongodb code asynchronous.
+                     * @param pipeline
+                     * @param callbackFn
+                     * @param completeFn
+                     */
+                    aggregateCursor: function (pipeline, callbackFn, completeFn) {
+                        var boundCallback = Meteor.bindEnvironment(function(error, result) {
+                            if ( error == null ) {
+                                // Note: you will not be able to step into this function or set
+                                // breakpoints on it.
+                                // fiber runs in native code.
+    //                            console.log("aggregate Processing results");
+    
+                                _.each(result, callbackFn);
+                                if (typeof completeFn === 'function') {
+                                    completeFn();
+                                }
+                            } else {
+                                throw new Meteor.Error(500, error.toString());
+                            }
+                        });
+                        var mongoDbCollection = this.getMongoDbCollection();
+                        mongoDbCollection.aggregate(pipeline, boundCallback);
+                    }
+                });
+                //Mini mongo doesn't support indexes, so only doing this on server.
+                for (var i in indexedProperties) {
+                    var propertyName = indexedProperties[i];
+                    var index = {};
+                    index[propertyName] = 1;
+                    var opts = { name: 'idx_asc_' + propertyName};
+                    subClassType.databaseTable._ensureIndex(index, opts);
+                }
+            }
+        } else {
+            // TODO 2016-06-12: we should create functions that only report an error if the user tries to do database operations.
+            // but considering that most of the time they do want to do so
+            console.warn(subClassType.typeName(),
+                ": No databaseTableName, or databaseDefinition property provided in definition. Find* functions not created. This is o.k. if ",
+                subClassType.typeName()," is client-side only for example.");
         }
-    } else {
-        // TODO 2016-06-12: we should create functions that only report an error if the user tries to do database operations.
-        // but considering that most of the time they do want to do so
-        console.warn(subClassType,typeName(),
-            ": No databaseTableName, or databaseDefinition property provided in definition. Find* functions not created. This is o.k. if ",
-            subClassType,typeName()," is client-side only for example.");
-    }
-    if (Meteor.isClient) {
-        // For debugging: get raw collection of records available to client.
-        Object.defineProperty(subClassType, '_rawDocs', {
-            get: function() {
-                return this.databaseTable._collection._docs._map;
-            }
+        if (Meteor.isClient) {
+            // For debugging: get raw collection of records available to client.
+            Object.defineProperty(subClassType, '_rawDocs', {
+                get: function() {
+                    return this.databaseTable._collection._docs._map;
+                }
+            });
+        }
+    
+        var typeName = typeNameFn.call(this);
+        EJSON.addType(typeName, function(rawJson) {
+            // TODO : security : need to hash _id, createdAt and any other immutables + secret salt to
+            // make sure that immutables are not changed.
+            // this is a little awkward because sometimes deserializing from db, sometimes from client:
+            // when deserializing from db different params are allowed?
+            // TODO: should this be a different function, since truly new construction is
+            // different than recreation?
+            var object = new subClassType(rawJson);
+            return object;
         });
+        DbObjectTypes[typeName] = subClassType;
+        return subClassType;
     }
-
-    var typeName = typeNameFn.call(this);
-    EJSON.addType(typeName, function(rawJson) {
-        // TODO : security : need to hash _id, createdAt and any other immutables + secret salt to
-        // make sure that immutables are not changed.
-        // this is a little awkward because sometimes deserializing from db, sometimes from client:
-        // when deserializing from db different params are allowed?
-        // TODO: should this be a different function, since truly new construction is
-        // different than recreation?
-        var object = new subClassType(rawJson);
-        return object;
-    });
-    DbObjectTypes[typeName] = subClassType;
-    return subClassType;
-};
-// we want code in this package to be able to modify the dbObjectTypes object - but nothing else.
-var DbObjectTypes = {};
-var JsonHelpers = {};
-
-function _getJSONHelper(jsonHelperObj) {
-    var jsonHelper = DbObjectTypes[jsonHelperObj] || JsonHelpers[jsonHelperObj] || _.getGlobal()[jsonHelperObj];
-    return jsonHelper;
-}
-
-// TODO: use Object.defineProperties
-DbObjectType.prototype = {
-    constructor : DbObjectType,
-    clone : function() {
+    clone() {
         var cloned = new this.constructor(this);
         return cloned;
-    },
-    equals : function(other) {
+    }
+    equals(other) {
         if (!(other instanceof this.constructor)) {
             return false;
         } else if (this._id !== other._id) {
@@ -937,25 +953,25 @@ DbObjectType.prototype = {
         } else {
             return this.toEJSONString() === other.toEJSONString();
         }
-    },
+    }
     /**
      * <typeName,subclassFunction> - this allows us to look up the subclasses for json de/serialization
      *  TODO? : make this a variable that cannot be easily changed
      */
-    dbObjectTypes: DbObjectTypes,
+    get dbObjectTypes() { return DbObjectTypes; }
     /**
      * additional jsonHelpers
      * <typeName,object with toJSONValue/fromJSONValue>
      */
-    jsonHelpers: JsonHelpers,
-    _getJSONHelper: _getJSONHelper,
+    get jsonHelpers() { return JsonHelpers; }
+    get _getJSONHelper() { return _getJSONHelper; }
     /**
      * Properties preserved by this method are properties which go
      * into the db. This includes non-writeable properties.
      *
      * This function should only called by the subclasses of DbObjectType
      */
-    toJSONValue: function(specialHandling, selectedPropertyNames) {
+    toJSONValue(specialHandling, selectedPropertyNames) {
         // Note: cannot use strict until there is a way to dereference a global in strict mode
         var self = this;
         var rawJson = {};
@@ -1007,14 +1023,14 @@ DbObjectType.prototype = {
             }
         });
         return rawJson;
-    },
+    }
     /**
      * This function should only called by the subclasses of DbObjectType
      * @param specialHandling
      * @param rawJson
      * @returns {DbObjectType}
      */
-    fromJSONValue: function(specialHandling, rawJson) {
+    fromJSONValue(specialHandling, rawJson) {
         var self = this;
         // we iterate on the defined property names not the properties in the rawJson, because an
         // attacker could send an object with a lot of properties and by following a whitelist
@@ -1081,48 +1097,48 @@ DbObjectType.prototype = {
         }
 
         return this;
-    },
-    addJsonHelper: function(typeName, objectWithToFromJSONValueFns) {
+    }
+    addJsonHelper(typeName, objectWithToFromJSONValueFns) {
         jsonHelpers[typeName] = objectWithToFromJSONValueFns;
-    },
+    }
     /**
      *
      * @returns EJSON.stringify(this)
      */
-    toEJSONString: function() {
+    toEJSONString() {
         var self = this;
         try {
             return EJSON.stringify(this);
         } catch(error) {
             self.error("EJSON.stringify failed error=", error);
         }
-    },
+    }
     // by default call toEJSONString
-    toString : function() {
+    toString() {
         return this.toEJSONString();
-    },
+    }
     // TODO(dmr): generically solve the email issue from
     // _humanDumpForTeam at some point
     // textStringForEmailing: function() {
     // },
-    pickClient: function(clientObject) {
+    pickClient(clientObject) {
         if ( clientObject) {
             return _.pick(clientObject, this.propertyNamesClientCanSet);
         } else {
             return {};
         }
-    },
-    extendClient: function(clientObject) {
+    }
+    extendClient(clientObject) {
         return this.fromJSONValue(this.pickClient(clientObject));
-    },
+    }
 
     // look for keys that will be ignored
-    checkSelf: function() {
+    checkSelf() {
         if ( !this.nonstrict ) {
             // we only take what is defined.
             _.onlyKeysCheck(this, this.requiredProperties, this.propertyNames);
         }
-    },
+    }
     /* Perform an upsert-like operation from an untrusted client,
      * checking some conditions. Updates only one object, not all
      * objects matching lookup.
@@ -1163,7 +1179,7 @@ DbObjectType.prototype = {
      * @return the database object stored ( will never be 'this' )
      * NOTE: will return undefined if optionsParam.revision === true and the code tries to save
      */
-    upsertFromUntrusted: function(optionsParam) {
+    upsertFromUntrusted(optionsParam) {
         'use strict';
 
         var options = _.extend({}, optionsParam);
@@ -1296,14 +1312,14 @@ DbObjectType.prototype = {
             result = target._save();
         }
         return result;
-    },
+    }
     /**
      * save an object, keeping a copy of the old version
      * @param allowForks: roll back 'transaction' if the target object is not the head of a
      * sequence of revisions
      * @return the new revision OR undefined if the revision would cause a fork.
      */
-    _revisionSave: function(allowForks) {
+    _revisionSave(allowForks) {
         'use strict';
         var self = this;
         var newRevision = new self.constructor(_.omit(self, '_id', 'createdAt', 'lastModifiedAt'));
@@ -1325,12 +1341,12 @@ DbObjectType.prototype = {
         } else {
             return newRevision;
         }
-    },
+    }
     /**
      * our standard save method.
      * @private
      */
-    _save: function() {
+    _save() {
         'use strict';
         var self =this;
         // allow the id to be supplied explicitly when creating a new record
@@ -1412,8 +1428,8 @@ DbObjectType.prototype = {
             this._makePropertyImmutable('_id');
         }
         return this;
-    },
-    _createJsonForDb: function() {
+    }
+    _createJsonForDb() {
         var self = this;
         // TODO: certain objects we don't want to convert to a string representation
         // Specifically: ObjectID, Date. However for sending to the client we do want to convert to
@@ -1442,16 +1458,16 @@ DbObjectType.prototype = {
             });
         }
         return jsonToUpdate;
-    },
-    _makePropertyImmutable: function(propertyName) {
+    }
+    _makePropertyImmutable(propertyName) {
         Object.defineProperty(this, propertyName,
             {
                 writable: false,
                 configurable: false,
             }
         );
-    },
-    extendClientWithForcedValues: function(clientObj, forcedValues) {
+    }
+    extendClientWithForcedValues(clientObj, forcedValues) {
         if ( clientObj == null && forcedValues == null ) {
             // TODO(dmr) Check what extendClient returns
             return this;
@@ -1474,12 +1490,12 @@ DbObjectType.prototype = {
             copyObj = forcedValues;
         }
         return this.extendClient(copyObj);
-    },
-    error: function() {
+    }
+    error() {
         var msg = [this.typeName(), ": id=",this.id,"; "].concat(arguments);
         console.error.apply(console, msg);
-    },
-    findAllReferencesQueries: function(options) {
+    }
+    findAllReferencesQueries(options) {
         var _options;
         if ( options ) {
             _options = _.extend({}, options);

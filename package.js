@@ -1,10 +1,14 @@
 var packageName = 'patmoore:meteor-collection-management';
 
-var  mongo = 'mongo@1.1.9';
-var underscore = 'underscore@1.0.9';
-var ejson = 'ejson@1.0.12';
-var ecmascript = 'ecmascript@0.4.5';
-var modules = 'modules@0.6.3';
+var externalPackages = [
+    'mongo@1.1.9',
+    'underscore@1.0.9',
+    'ejson@1.0.12',
+    'ecmascript@0.4.5',
+    'aldeed:simple-schema@1.5.3',
+    'modules@0.6.3',
+    'check@1.2.1'
+]
 Package.describe({
     name: packageName,
     summary: "Meteor Collection Management",
@@ -13,11 +17,9 @@ Package.describe({
 });
 
 Package.onUse(function (api) {
-    api.use(ejson);
-    api.use(underscore);
-    api.use(ecmascript);
-    api.use(mongo);
-    api.use(modules);
+    externalPackages.forEach(function(packageName) {
+        api.use(packageName);
+    });
     api.mainModule("src/server/index.js", "server");
     api.mainModule("src/client/index.js", "client");
 
@@ -32,9 +34,9 @@ Package.onUse(function (api) {
 
 Package.onTest(function (api) {
     api.use([packageName, 'tinytest', 'test-helpers']);
-    api.use(underscore, ['client', 'server']);
-    api.use(ecmascript, ['client', 'server']);
-    api.use(mongo, ['client', 'server']);
+    externalPackages.forEach(function(packageName) {
+        api.use(packageName);
+    });
     api.addFiles('src/tests/dbobject-test.js', ['client', 'server']);
     api.addFiles('src/tests/enums-test.js', ['client', 'server']);
     api.addFiles('src/tests/manager-test.js', ['client', 'server']);
