@@ -7,6 +7,13 @@ var CreateKnownOptionKeys = Object.freeze([
    'typeName',
    'properties',
    'databaseTableName',
+   /**
+    *  { databaseTable: <mongo collection>, databaseTableName: <string>, 
+    *  databaseAutoDenyAll: [true] true means do a 
+    *  deny({ insert() { return true; },
+              update() { return true; },
+              remove() { return true; }});
+    */   
    'databaseDefinition',
    'extensions',
    'privateProperties',
@@ -267,7 +274,7 @@ DbObjectType = class DbObjectType {
  * will be supplied of : { writable: true }
  *
  *   'databaseTableName' - NOTE: To avoid inadvertently accidentally changing the database table
- * names ( very! bad! ) pass in the databaseTableName as a separate string,
+ * names ( very! bad! ) pass in the databaseTableName as a separate string from the typeName
  * also 2 different subclasses can refer to same collection ( think different views )
  *
  * @returns {*} the constructor function
@@ -552,20 +559,6 @@ DbObjectType = class DbObjectType {
                     subClassType.apply(self, arguments);
                     return self;
                 }
-            },
-            findAllReferencesQueries: function(options) {
-                // TODO: maybe make defined only once on DbObjectType
-                var _options;
-                if ( options ) {
-                    _options = _.extend({}, options);
-                } else {
-                    _options = {};
-                }
-                _.extend(_options, {
-                    typeName: subClassType.prototype.typeName()
-                });
-                var queriesAndUpdatesObject = _findAllReferencesQueries(_options);
-                return queriesAndUpdatesObject;
             }
         });
         if ( extensions != null ) {
@@ -581,7 +574,8 @@ DbObjectType = class DbObjectType {
     
         if ( databaseDefinition == null && options.databaseTableName != null) {
             databaseDefinition = {
-                databaseTableName: options.databaseTableName
+                databaseTableName: options.databaseTableName,
+                databaseAutoDenyAll: true
             };
         }
         var dbCollection = _.deep(databaseDefinition, 'databaseTable');
@@ -596,6 +590,13 @@ DbObjectType = class DbObjectType {
                         return new subClassType(doc);
                     }
                 });
+                if(databaseDefinition.databaseAutoDenyAll) {
+                    databaseDefinition.databaseTable.deny({
+                        insert() { return true; },
+                        update() { return true; },
+                        remove() { return true; },
+                      });
+                }
             }
         }
     
@@ -1494,6 +1495,19 @@ DbObjectType = class DbObjectType {
     error() {
         var msg = [this.typeName(), ": id=",this.id,"; "].concat(arguments);
         console.error.apply(console, msg);
+    }
+    static findAllReferencesQueries(options) {
+        var _options;
+        if ( options ) {
+            _options = _.extend({}, options);
+        } else {
+            _options = {};
+        }
+        _.extend(_options, {
+            typeName: this.prototype.typeName()
+        });
+        var queriesAndUpdatesObject = _findAllReferencesQueries(_options);
+        return queriesAndUpdatesObject;
     }
     findAllReferencesQueries(options) {
         var _options;
