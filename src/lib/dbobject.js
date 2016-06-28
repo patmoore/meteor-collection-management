@@ -537,7 +537,7 @@ DbObjectType = class DbObjectType {
                 },
                 enumerable: false
             }
-        }));
+        });
         
         Object.defineProperties(subClassType, {
             typeName: {
