@@ -7,7 +7,7 @@ var subscribeTypes = {
 /**
  * Attached to 
  */
-export var readyFn = function () {
+readyFn = function () {
     if (this.handle == null || !_.isFunction(this.handle.ready)) {
         return true;
     } else {
@@ -43,7 +43,7 @@ function oneFn() {
  * handle: the handle returned by a Manager.____Handle() call. ( the client-side wrapper around the Meteor subscribe )
  * @return an object that has duck typing to make it look like a meteor cursor.
  */
-export var one = function one(handle) {
+one = function one(handle) {
     var object = {
         handle: handle,
         method: oneFn,
@@ -71,7 +71,7 @@ function manyFn() {
     return result;
 }
 // Use these methods in initializeData
-export var many = function many(handle) {
+many = function many(handle) {
     var object = {
         handle: handle,
         method: manyFn,
@@ -79,7 +79,7 @@ export var many = function many(handle) {
     };
     return object;
 };
-export var count = function count(handle) {
+count = function count(handle) {
     var object = {
         handle: handle,
         method: function () {
