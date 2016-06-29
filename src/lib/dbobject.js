@@ -13,6 +13,7 @@ var CreateKnownOptionKeys = Object.freeze([
     *  deny({ insert() { return true; },
               update() { return true; },
               remove() { return true; }});
+       options: passed to the Mongo.Collection(name,options)
     */   
    'databaseDefinition',
    'extensions',
@@ -582,14 +583,21 @@ DbObjectType = class DbObjectType {
         // create database table if needed
         if ( databaseDefinition != null && dbCollection == null) {
             if (databaseDefinition.databaseType == null || databaseDefinition.databaseType === 'mongo') {
-                databaseDefinition.databaseTable = dbCollection = new Mongo.Collection(
-                    databaseDefinition.databaseTableName, {
+                let dbOptions = {
                     transform: function (doc) {
                         // TODO: should this be a different function, since truly new construction is
                         // different than recreation?
                         return new subClassType(doc);
                     }
-                });
+                    // TODO : should defineMutationMethods:false be set on Mongo.Collection if databaseDefinition.databaseAutoDenyAll?
+
+                };
+                if (databaseDefinition.options) {
+                    _.extend(dbOptions,databaseDefinition.options);
+                }
+                databaseDefinition.databaseTable = dbCollection = new Mongo.Collection(
+                    databaseDefinition.databaseTableName, dbOptions
+                );
                 if(databaseDefinition.databaseAutoDenyAll) {
                     databaseDefinition.databaseTable.deny({
                         insert() { return true; },
