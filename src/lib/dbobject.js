@@ -1,10 +1,13 @@
 import { SimpleSchema } from 'meteor/aldeed:simple-schema';
 import { handleStringOrObjectDefinition } from './internalutils.js';
+ 
 var CreateKnownOptionKeys = Object.freeze([
    // Optional constructor.
    // TODO: change name to 'constructor' or similar
    'subClassType',
+   // string
    'typeName',
+   // array of String or object definitions
    'properties',
    'databaseTableName',
    /**
@@ -51,9 +54,11 @@ var PropertyDefinitionOptions = Object.freeze({
    'fromJSONValue':Match.Optional(Match.OneOf(Function)),
    'jsonHelper': Match.Optional(Match.OneOf(Function)),
    'reference':Match.Optional(Match.OneOf(Boolean)),
+   // TODO - change to 'index' to match https://github.com/aldeed/meteor-schema-index  index: true,
+   // unique: true, sparse: true - to allow multiple documents with no items.
    'indexed':Match.Optional(Match.OneOf(Boolean)),
    'security':Match.Optional(Match.OneOf(Function)),
-   'required':Match.Optional(Match.OneOf(Boolean)),
+//   'optional':Match.Optional(Match.OneOf(Boolean)),
    //'defaultValue', -- now provided by SimpleSchema
    'derived':Match.Optional(Match.Any)
 });
@@ -251,7 +256,7 @@ DbObjectType = class DbObjectType {
  *     INDEXING section>,
  *     'security': <default: true if reference=true OR writable=false. if true the client is not
  *     allowed to set this property>,
- *     'required': <default: false. if true and an instance of this object is saved then a warning
+ *     'optional': <default: false. if false and an instance of this object is saved then a warning
  *     message is printed about missing fields.>,
  *     'defaultValue': <a value or a function returning a value that will be used if the property is
  *     undefined ( not just null ) function is passed>
@@ -396,7 +401,7 @@ DbObjectType = class DbObjectType {
             if (propertyDefinition.reference || propertyDefinition.indexed) {
                 indexedProperties.push(propertyName);
             }
-            if (propertyDefinition.required) {
+            if (!('optional' in propertyDefinition) || propertyDefinition['optional'] ===false)  {
                 requiredProperties.push(propertyName);
             }
             // these are the property fields that Javascript defines
@@ -598,13 +603,6 @@ DbObjectType = class DbObjectType {
                 databaseDefinition.databaseTable = dbCollection = new Mongo.Collection(
                     databaseDefinition.databaseTableName, dbOptions
                 );
-                if(databaseDefinition.databaseAutoDenyAll) {
-                    databaseDefinition.databaseTable.deny({
-                        insert() { return true; },
-                        update() { return true; },
-                        remove() { return true; },
-                      });
-                }
             }
         }
     
@@ -614,6 +612,13 @@ DbObjectType = class DbObjectType {
             // .. and the more statically accessed method HumanResearcher.databaseTable
             // both have their conveniences.
             subClassType.databaseTable = dbCollection;
+            if(databaseDefinition.databaseAutoDenyAll) {
+                databaseDefinition.databaseTable.deny({
+                    insert() { return true; },
+                    update() { return true; },
+                    remove() { return true; },
+                  });
+            }
             /**
              * These functions are usually called from generated partially bound functions.
              *
@@ -1373,6 +1378,8 @@ DbObjectType = class DbObjectType {
             }
             delete this._newId;
         }
+        // update lastModifiedAt always
+        this.lastModifiedAt = new Date();
         try {
             this.checkSelf();
         } catch(e){
@@ -1381,10 +1388,8 @@ DbObjectType = class DbObjectType {
             } else {
                 self.error("While saving a db record:"+ e.message);
             }
-            debugger;
         }
-        // update lastModifiedAt always
-        this.lastModifiedAt = new Date();
+
         var jsonForDb = this._createJsonForDb();
         if ( this._id ) {
             /**
@@ -1501,8 +1506,9 @@ DbObjectType = class DbObjectType {
         return this.extendClient(copyObj);
     }
     error() {
-        var msg = [this.typeName(), ": id=",this.id,"; "].concat(arguments);
-        console.error.apply(console, msg);
+        var msg = ["DbObject",this.typeName(), "error", ": id=",this.id,"; "].concat(Array.prototype.slice.call(arguments)).join(" ");
+        console.error( msg);
+        debugger;
     }
     static findAllReferencesQueries(options) {
         var _options;

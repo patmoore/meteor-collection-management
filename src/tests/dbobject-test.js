@@ -493,8 +493,8 @@ Tinytest.add(mcm_dbobj + 'upsertFromUntrusted instance method', function (test) 
 RequiredFieldsType = DbObjectType.create({
     typeName: 'testCollectionWithRequiredFields',
     properties: [
-        {'field1': {required: true}},
-        'field2'
+        'field1',
+        {'field2': {optional: true}}
     ],
     databaseTableName: 'testCollectionWithRequiredFieldsTable'
 });
@@ -758,7 +758,9 @@ Tinytest.add(mcm_dbobj + ' - nonstrict', function (test) {
     test.equal(saved.f, 'f value', "full obj="+JSON.stringify(saved));
     test.equal(saved.g, 'g value', "full obj="+JSON.stringify(saved));
 });
-
+/**
+ * Do not allow properties that are declared allowed in the database.
+ */
 StrictType = DbObjectType.create({
     typeName: 'strict',
     properties: [
