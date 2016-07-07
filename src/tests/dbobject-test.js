@@ -4,10 +4,10 @@ var TEST_COLLECTION_TABLE_NAME = 'testCollectionTableName';
 var EJSON = Package.ejson.EJSON;
 TestCollectionType = DbObjectType.create({
     typeName: 'testCollection',
-    properties: [
-        'field1',
-        'field2'
-    ],
+    properties: {
+        'field1':{type:String},
+        'field2':{type:String}
+    },
     databaseTableName: TEST_COLLECTION_TABLE_NAME
 });
 
@@ -62,62 +62,72 @@ __toGlobal('SampleForTestEnum', SampleForTestEnum);
 
 var TestCollectionTypeComplex = DbObjectType.create({
     typeName: 'testCollectionComplex',
-    properties: [
-        {
-            _withDependentDefault: {
-                defaultValue: function (propertyName) {
-                    // at the beginning
-                    return this.normalField;
-                }
-            },
-            refField: {
-                reference: true
-            },
+    properties: {
+        _withDependentDefault: {
+            defaultValue: function (propertyName) {
+                // at the beginning
+                return this.normalField;
+            }, 
+            optional:true
+        },
+        refField: {
+            reference: true,
+            optional:true
+        },
 
-            refField2: {
-                reference: true
+        refField2: {
+            reference: true,
+            optional:true
+        },
+        aDate: {
+            'get': function () {
+                return new Date();
             },
-            aDate: {
-                'get': function () {
-                    return new Date();
-                }
-            },
-            sampleForTestEnum0: {
-                toJSONValue: SampleForTestEnum.toJSONValue,
-                fromJSONValue: SampleForTestEnum.fromJSONValue
-            },
-            sampleForTestEnum1: {
-                jsonHelper: SampleForTestEnum
-            },
-            sampleForTestEnum2: {
-                jsonHelper: 'SampleForTestEnum'
+            optional:true
+        },
+        sampleForTestEnum0: {
+            toJSONValue: SampleForTestEnum.toJSONValue,
+            fromJSONValue: SampleForTestEnum.fromJSONValue,
+            optional:true
+        },
+        sampleForTestEnum1: {
+            jsonHelper: SampleForTestEnum,
+            optional:true
+        },
+        sampleForTestEnum2: {
+            jsonHelper: 'SampleForTestEnum',
+            optional:true
+        },
+        'normalField':{
+            optional:true
+        },
+        'anArrayOfIds':{
+            optional:true
+        },
+        'anotherCollectionsId':{
+            optional:true
+        },
+    
+        securedField: {
+            security: true
+        },
+        withSecuredDefault: {
+            security: true,
+            defaultValue: function (propertyName) {
+                return "initialValue for normalField" + this.normalField;
             }
         },
-        'normalField',
-        'anArrayOfIds',
-        'anotherCollectionsId',
-        {
-            securedField: {
-                security: true
-            },
-            withSecuredDefault: {
-                security: true,
-                defaultValue: function (propertyName) {
-                    return "initialValue for normalField" + this.normalField;
-                }
-            },
-            withDefault: {
-                defaultValue: function (propertyName) {
-                    return "some silly default";
-                }
-            },
-            withDefaultNull: {
-                defaultValue: function (propertyName) {
-                    return null;
-                }
+        withDefault: {
+            defaultValue: function (propertyName) {
+                return "some silly default";
+            }
+        },
+        withDefaultNull: {
+            defaultValue: function (propertyName) {
+                return null;
             }
         }
-    ],
+    },
     databaseTableName: 'testCollectionTableNameComplex'
 });
 
@@ -176,20 +186,20 @@ Tinytest.add(mcm_dbobj + 'to/fromJsonValue', function (test) {
 });
 
 if (Meteor.isServer) {
-    IndexedCollection = DbObjectType.create({
+    var IndexedCollection = DbObjectType.create({
         typeName: 'indexedCollection',
-        properties: [
-            'normalField',
-            {'indexedField': {indexed: true}},
-            {'refField': {reference: true}},
+        properties: {
+            'normalField': {optional:true, type:String},
+            'indexedField': {optional:true,indexed: true},
+            'refField': {optional:true,reference: true},
             // test case 'by default' reference parameters
-            'userId',
-            'fooIds',
+            'userId': {optional:true},
+            'fooIds':{optional:true},
             // 'id' ending should not be flagged as an id ( because words can end in 'id' )
-            'notanid',
-            'nottheids',
-            'valid'
-        ],
+            'notanid':{optional:true},
+            'nottheids':{optional:true},
+            'valid':{optional:true}
+        },
         databaseTableName: 'indexedCollectionTableName'
     });
     var t = new IndexedCollection({normalField: 'value'});
@@ -240,7 +250,9 @@ TestSettablePropertiesType = DbObjectType.create({
             notSecuredField: {
                 security: false
             },
-            emptyField: {}
+            emptyField: {
+                optional:true
+            }
         }
     ],
     databaseTableName: 'testSettablePropertiesTableName'

@@ -52,17 +52,16 @@ var PropertyDefinitionOptions = Object.freeze({
    'writable':Match.Optional(Match.OneOf(Boolean)),
    'toJSONValue':Match.Optional(Match.OneOf(Function)),
    'fromJSONValue':Match.Optional(Match.OneOf(Function)),
-   'jsonHelper': Match.Optional(Match.OneOf(Function)),
+   'jsonHelper': Match.Optional(Match.Any),
    'reference':Match.Optional(Match.OneOf(Boolean)),
    // TODO - change to 'index' to match https://github.com/aldeed/meteor-schema-index  index: true,
    // unique: true, sparse: true - to allow multiple documents with no items.
    'indexed':Match.Optional(Match.OneOf(Boolean)),
-   'security':Match.Optional(Match.OneOf(Function)),
+   'security':Match.Optional(Match.OneOf(Boolean)),
 //   'optional':Match.Optional(Match.OneOf(Boolean)),
    //'defaultValue', -- now provided by SimpleSchema
    'derived':Match.Optional(Match.Any)
 });
-var PropertyDefinitionOptionKeys = Object.freeze(Object.keys(PropertyDefinitionOptions));
 
 SimpleSchema.extendOptions(PropertyDefinitionOptions);
 function isPropertyDefinitionWritable(propertyDefinition) {
@@ -351,11 +350,16 @@ DbObjectType = class DbObjectType {
         // Property definitions which are not writable should not be
         // added to propertyNamesClientCanSet.
         var propertyNamesClientCanSet = [];
-    
+        /**
+         * modifies the properties, propertyNamesClientCanSet, referenceProperties, indexedProperties, requiredProperties,
+         * propertiesWithDefault
+         * Ensures that there is a 'type' for every property ( required by SimpleSchema )
+         */
         function processPropertyDefinition(propertyDef, propertyName) {
             'use strict';
-    
-            var propertyDefinition = _.pick(propertyDef, PropertyDefinitionOptionKeys);
+            // We are now using SimpleSchema - which has property key's that we don't know about.
+            // so no filtering of keys with _.pick
+            var propertyDefinition = _.extend({},propertyDef);
             if (_.isEmpty(propertyDefinition)) {
                 propertyDefinition = {writable: true};
             }
@@ -397,12 +401,27 @@ DbObjectType = class DbObjectType {
             }
             if (propertyDefinition.reference) {
                 referenceProperties.push(propertyName);
+                if (!('regEx' in propertyDefinition)) {
+                    // simple regex validity check on something that should be a id.
+                    propertyDefinition.regEx= SimpleSchema.RegEx.Id;
+                }
             }
             if (propertyDefinition.reference || propertyDefinition.indexed) {
                 indexedProperties.push(propertyName);
             }
             if (!('optional' in propertyDefinition) || propertyDefinition['optional'] ===false)  {
                 requiredProperties.push(propertyName);
+            }
+            if ( !('type' in propertyDefinition)) {
+                if (propertyDefinition.reference) {
+                    // could also be ObjectID ?
+                    propertyDefinition.type = String;
+                } else {
+                    let msg = `DbObjectType defining ${typeNameFn()} propertyName=${propertyName} is missing a 'type' setting to Object and blackbox:true`;
+                    propertyDefinition.type = Object;
+                    propertyDefinition.blackbox = true;
+                    console.warn(msg);
+                }
             }
             // these are the property fields that Javascript defines
             // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/defineProperties
@@ -430,6 +449,9 @@ DbObjectType = class DbObjectType {
         handleStringOrObjectDefinition.call(this, {
                 _id: {
                     // required by MongoDb
+                    type: String,
+                    // optional because initial save may not have an _id
+                    optional:true,
                     security: true,
                     enumerable: false,
                     // we might allow it to be removed ( for transmission to client)
@@ -437,36 +459,56 @@ DbObjectType = class DbObjectType {
                 },
                 // when this object created
                 createdAt: {
+                    // TODO - should really be a long -- timestamp ( not timezone date)
+                    type: Date,
                     // by default indexed so we can find last created objects
                     indexed: true,
                     // client definitely not allowed to fuck with created time
                     security: true,
                     enumerable: true,
                     // we might allow it to be removed ( for transmission to client)
-                    configurable: true
+                    configurable: true,
+                    autoValue: function() {
+                        if (this.isInsert) {
+                          return new Date();
+                        } else if (this.isUpsert) {
+                          return {$setOnInsert: new Date()};
+                        } else {
+                          this.unset();  // Prevent user from supplying their own value
+                        }
+                    }
                 },
                 lastModifiedAt: {
+                    // TODO - should really be a long -- timestamp ( not timezone date)
+                    type: Date,
                     indexed: true,
                     security: true,
                     enumerable: true,
                     // we might allow it to be removed ( for transmission to client)
-                    configurable: true
+                    configurable: true,
+                    autoValue: function() {
+                        if (this.isUpdate) {
+                          return new Date();
+                        }
+                    }
                 }
             },
             processPropertyDefinition,
             false
         );
         handleStringOrObjectDefinition.call(this, options.properties, processPropertyDefinition, false);
+        var simpleSchema = new SimpleSchema(properties);
         databaseDefinition = options.databaseDefinition;
         extensions = options.extensions;
-        if ( options.privateProperties != null ) {
-            _.extend(properties, options.privateProperties);
-        }
+        // avoid hanging on to the options argument
         var nonstrict = !!options.nonstrict;
     
         // make the subClassType extend DbObjectType.prototype 
         // NOTE: this means that any previous code to extend the subClassType.prototype will be lost
         subClassType.prototype = Object.create(DbObjectType.prototype, properties);
+        if ( options.privateProperties != null ) {
+            Object.defineProperties(subClassType.prototype, options.privateProperties);
+        }
         Object.defineProperties(subClassType.prototype, {
             propertyNames: {
                 writable :false,
@@ -542,6 +584,11 @@ DbObjectType = class DbObjectType {
                     return result;
                 },
                 enumerable: false
+            },
+            _schema: {
+                value: simpleSchema,
+                writable: false,
+                enumerable: false
             }
         });
         
@@ -587,7 +634,7 @@ DbObjectType = class DbObjectType {
         var dbCollection = _.deep(databaseDefinition, 'databaseTable');
         // create database table if needed
         if ( databaseDefinition != null && dbCollection == null) {
-            if (databaseDefinition.databaseType == null || databaseDefinition.databaseType === 'mongo') {
+//            if (databaseDefinition.databaseType == null || databaseDefinition.databaseType === 'mongo') {
                 let dbOptions = {
                     transform: function (doc) {
                         // TODO: should this be a different function, since truly new construction is
@@ -603,12 +650,13 @@ DbObjectType = class DbObjectType {
                 databaseDefinition.databaseTable = dbCollection = new Mongo.Collection(
                     databaseDefinition.databaseTableName, dbOptions
                 );
-            }
+//            }
         }
     
         if ( dbCollection != null) {
             // make available both on the prototype (so this.databaseTable works)
             subClassType.prototype.databaseTable = dbCollection;
+            dbCollection.attachSchema(simpleSchema);
             // .. and the more statically accessed method HumanResearcher.databaseTable
             // both have their conveniences.
             subClassType.databaseTable = dbCollection;
@@ -1419,13 +1467,11 @@ DbObjectType = class DbObjectType {
                     if (error) {
                         self.error(self._id,":Failed to update. error=",error,
                             "jsonForUpdate=", jsonForUpdate);
-                        debugger;
                     }
                 }
             );
             if ( affectedDocumentCount == 0 ) {
                 self.error(self._id,":No documents found with id");
-                debugger;
             }
         } else {
             if ( _newId ) {
@@ -1435,7 +1481,6 @@ DbObjectType = class DbObjectType {
                 if ( error ) {
                     self.error("Failed to insert. error=",error,
                         "jsonForDb=", jsonForDb);
-                    debugger;
                 }
             });
             this._id = _id;
@@ -1467,7 +1512,6 @@ DbObjectType = class DbObjectType {
                 } catch(e) {
                     // TODO: error message
                     self.error("nonstrict object: _createJsonForDb key =", key, "could not be converted to json. These extra keys found=", extraPropsFound);
-                    debugger;
                 }
             });
         }

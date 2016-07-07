@@ -6,8 +6,10 @@ var externalPackages = [
     'ejson@1.0.12',
     'ecmascript@0.4.5',
     'aldeed:simple-schema@1.5.3',
+    'aldeed:collection2@2.9.1',
     'modules@0.6.3',
-    'check@1.2.1'
+    'check@1.2.1',
+    'mdg:validation-error@0.5.1'
 ]
 Package.describe({
     name: packageName,
