@@ -111,6 +111,8 @@ export var extendManagerType_client = function() {
                 var meteorCallName = this.getMeteorCallName(meteorCallNameSuffix);
                 if (typeof(meteorCallDefinition) === "object") {
                     trackingEventFn = meteorCallDefinition.trackingEventFn;
+                } else {
+                    debugger; // when should this be allowed?
                 }
                 // Create the client function that will call the server-side function with the same name.
                 // This allows code to be location agnostic: if the outside code is running on the

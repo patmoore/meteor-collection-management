@@ -1426,6 +1426,7 @@ DbObjectType = class DbObjectType {
             }
             delete this._newId;
         }
+        // HACK TODO-- lastModifiedAt should be update by the simple-schema/collection2 code - verify. 
         // update lastModifiedAt always
         this.lastModifiedAt = new Date();
         try {
@@ -1437,6 +1438,7 @@ DbObjectType = class DbObjectType {
                 self.error("While saving a db record:"+ e.message);
             }
         }
+        // END HACK
 
         var jsonForDb = this._createJsonForDb();
         if ( this._id ) {

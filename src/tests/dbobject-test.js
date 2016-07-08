@@ -109,7 +109,8 @@ var TestCollectionTypeComplex = DbObjectType.create({
         },
     
         securedField: {
-            security: true
+            security: true,
+            optional:true
         },
         withSecuredDefault: {
             security: true,
